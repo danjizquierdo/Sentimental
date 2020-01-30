@@ -5,6 +5,9 @@ import json
 import config
 import datetime
 import re
+import logging
+
+logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
 
 auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
 auth.set_access_token(config.access_token, config.access_token_secret)
@@ -39,6 +42,10 @@ def listen(terms, amount):
                         tweet_['retweet_count'] = tweet.retweet_count
                     else:
                         tweet_['retweet_count'] = 0
+                    if tweet.favorite_count:
+                        tweet_['favorite_count'] = tweet.favorite_count
+                    else:
+                        tweet_['favorite_count'] = 0
                     tweet_['user_id'] = tweet.user.id
                     tweet_['coordinates'] = tweet.coordinates
                     hash_tag = re.search(r'\#\w*',tweet.full_text)
@@ -52,7 +59,9 @@ def listen(terms, amount):
                     tweets[int(tweet.id)] = tweet_
                 except Exception as e:
                     print(e)
-                    print(term)
+                    print(tweet)
+                    logging.error(f'Error: {e}\nFailed term: {term}Failed tweet: {tweet}')
+                    continue
 
                 try:
                     user_ = dict()
@@ -65,8 +74,9 @@ def listen(terms, amount):
                     users[int(tweet.user.id)] = user_
                 except Exception as e:
                     print(e)
-                    print(term)
-
+                    print(tweet)
+                    logging.error(f'Error: {e}\nFailed term: {term} Failed user: {user}\n')
+                    continue
     with open('tweets.json', 'a+') as t:
         json.dump(tweets, t, default=myconverter)
     with open('users.json', 'a+') as u:
