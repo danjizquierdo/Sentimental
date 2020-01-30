@@ -11,7 +11,7 @@ logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %
 
 auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
 auth.set_access_token(config.access_token, config.access_token_secret)
-api = tweepy.API(auth)
+api = tweepy.API(auth, wait_on_rate_limit=True)
 
 # nlp = spacy.load("en_core_web_sm")
 
@@ -77,6 +77,9 @@ def listen(terms, amount):
                     print(tweet)
                     logging.error(f'Error: {e}\nFailed term: {term} Failed user: {user}\n')
                     continue
+        print(f'Done with {term}. Currently {len(tweets)} collected from {len(users)} users.')
+
+    print(f'{len(tweets)} tweets and {len(users)} users.')
     with open('tweets.json', 'a+') as t:
         json.dump(tweets, t, default=myconverter)
     with open('users.json', 'a+') as u:
@@ -97,4 +100,10 @@ def listen(terms, amount):
 
 
 if __name__ == "__main__":
-    listen(['brushfire'], 20)
+    listen([
+        '#Australia', '#AustralianFires', '#koala', '#AustraliaBurning',
+        '#ClimateActionNow', '#AustraliaBushFires', '#bushfirecrisis', '#canberra',
+        '#auspol', '#koalateelove', '#aussiemateship', '#Illridewithyou', '#sydneysmoke',
+        '#sydneyfires', '#nswfires', '#climatecrisis', '#straya', 'brushfire',
+        '#canberrasmoke', '#canberrafires', '#AustraliaBurns', '#namadgi'
+    ], 1000)
