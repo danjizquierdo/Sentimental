@@ -15,18 +15,19 @@ api = tweepy.API(auth)
 tweets = {}
 users = {}
 
+
 def myconverter(o):
     if isinstance(o, datetime.datetime):
         return o.__str__()
 
+
 def listen(terms, amount):
     for term in terms:
-        for tweet in tweepy.Cursor(api.search,q=term, count=amount, tweet_mode ='extended').items(amount):
+        for tweet in tweepy.Cursor(api.search, q=term, count=amount, tweet_mode ='extended').items(amount):
             if (not tweet.retweeted) and ('RT @' not in tweet.full_text):
                 try:
-                    tweet_={}
+                    tweet_ = dict()
                     tweet_['created_at'] = tweet.created_at
-
                     tweet_['text'] = tweet.full_text
                     if tweet.lang:
                         tweet_['lang'] = tweet.lang
@@ -34,6 +35,10 @@ def listen(terms, amount):
                         tweet_['in_reply_to_status_id'] = tweet.in_reply_to_status_id
                     if tweet.in_reply_to_user_id:
                         tweet_['in_reply_to_user_id'] = tweet.in_reply_to_user_id
+                    if tweet.retweet_count:
+                        tweet_['retweet_count'] = tweet.retweet_count
+                    else:
+                        tweet_['retweet_count'] = 0
                     tweet_['user_id'] = tweet.user.id
                     tweet_['coordinates'] = tweet.coordinates
                     hash_tag = re.search(r'\#\w*',tweet.full_text)
@@ -50,7 +55,7 @@ def listen(terms, amount):
                     print(term)
 
                 try:
-                    user_={}
+                    user_ = dict()
                     user_['screen_name'] = tweet.user.screen_name
                     user_['followers_count'] = tweet.user.followers_count
                     user_['verified'] = tweet.user.verified
@@ -61,9 +66,10 @@ def listen(terms, amount):
                 except Exception as e:
                     print(e)
                     print(term)
-    with open('tweets.json', 'w+') as t:
+
+    with open('tweets.json', 'a+') as t:
         json.dump(tweets, t, default=myconverter)
-    with open('users.json', 'w+') as u:
+    with open('users.json', 'a+') as u:
         json.dump(users, u, default=myconverter)
 
     # for hash_tag in hash_tags:
