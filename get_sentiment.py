@@ -34,9 +34,10 @@ nltk.download('wordnet')
 tweets = {}
 users = {}
 
-mask1 = np.array(Image.open(requests.get('http://clipart-library.com/img1/677359.jpg', stream=True).raw))
+mask1 = np.array(Image.open(requests.get(
+    'https://i.etsystatic.com/7434544/r/il/103fb1/1665355209/il_1588xN.1665355209_2eui.jpg', stream=True).raw))
 mask2 = np.array(Image.open(requests.get(
-    'https://cdn.clipart.email/a54f9015ae8f6f42ebde739263708e18_image-result-for-koala-silhouette-clipart-black-and-white-animal-_236-278.jpeg',
+    'https://www.vectorportal.com/img_novi/kangaroo-silhouette.jpg',
     stream=True).raw))
 lemmatizer = WordNetLemmatizer()
 
@@ -92,11 +93,11 @@ def create_wordcloud(series, tag, top=200, mask=[mask1, mask2]):
 
     vocab = tokenized(series)
 
-    cloud = WordCloud(background_color='whitesmoke', max_words=top, mask=mask[randint(0, 1)],
+    cloud = WordCloud(background_color='whitesmoke', max_words=top, mask=mask[randint(0, 1)], width=400, height=300,
                       contour_width=3, contour_color='crimson').generate(' '.join([word for word in vocab]))
+    plt.figure(figsize=(24, 12))
     plt.imshow(cloud, interpolation='bilinear')
     plt.title(f'Most Common words for {tag}')
-    plt.plot(figsize = (48,24))
     plt.axis('off')
     # plt.tight_layout(pad=0)
     plt.show();
