@@ -81,20 +81,19 @@ def wordfrequency(series, top):
     return frequencies.most_common(top)
 
 
-def create_wordcloud(series, tag, mask=[mask1, mask2], *top):
+def create_wordcloud(series, tag, top=200, mask=[mask1, mask2]):
     """ Take in a list of lists and create a WordCloud visualization for those terms.
     Parameters:
             series (iterable): A list of lists containing strings.
     Returns:
-        None: The ouput is a visualization of the strings in series in terms of the
+        None: The output is a visualization of the strings in series in terms of the
             frequency of their occurrence.
     """
 
     vocab = tokenized(series)
-    if not top[0]:
-        top[0]=200
 
-    cloud = WordCloud(background_color='grey', max_words=top[0], mask=mask[randint(0,1)]).generate(' '.join([word for word in vocab]))
+    cloud = WordCloud(background_color='whitesmoke', max_words=top, mask=mask[randint(0, 1)],
+                      contour_width=3, contour_color='crimson').generate(' '.join([word for word in vocab]))
     plt.imshow(cloud, interpolation='bilinear')
     plt.title(f'Most Common words for {tag}')
     plt.plot(figsize = (48,24))
