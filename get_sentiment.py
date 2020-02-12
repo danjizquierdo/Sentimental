@@ -8,9 +8,9 @@ from sys import argv
 import re
 import nltk
 from nltk import word_tokenize, FreqDist
-from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
+from nltk.collocations import BigramCollocationFinder as big_find
 import string
 from wordcloud import WordCloud
 from PIL import Image
@@ -65,7 +65,9 @@ def tokenized(series):
         tokens (list): list of every word in the series, not including stopwords
     """
 
-    corpus = ' '.join([tweet.lower() if type(tweet)==str else ' '.join([tag.lower() for tag in tweet]) for tweet in series])
+    corpus = ' '.join(
+        [tweet.lower() if type(tweet) == str else ' '.join([tag.lower() for tag in tweet]) for tweet in series])
+    corpus, tags = strip_tweets(corpus)
     tokens = process_tweet(corpus)
     return tokens
 
@@ -78,6 +80,11 @@ def wordfrequency(series, top):
     Returns:
         list (tuples): List of word and value pairs for the top words in the series.
     """
+    vocab = tokenized(series)
+    big = big_find.from_words(vocab)
+    big_measures = nltk.collocations.BigramAssocMeasures()
+    bestBigrams = big.above_score(score_fn=big_measures.raw_freq, min_score=1.0 / len(tuple(nltk.bigrams(series))))
+    vocab += bestBigrams
     frequencies = FreqDist(tokenized(series))
     return frequencies.most_common(top)
 
@@ -92,7 +99,6 @@ def create_wordcloud(series, tag, top=200, mask=[mask1, mask2]):
     """
 
     vocab = tokenized(series)
-
     cloud = WordCloud(background_color='whitesmoke', max_words=top, mask=mask[randint(0, 1)], width=400, height=300,
                       contour_width=3, contour_color='crimson').generate(' '.join([word for word in vocab]))
     plt.figure(figsize=(24, 12))
