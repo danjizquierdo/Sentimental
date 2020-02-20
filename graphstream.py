@@ -11,6 +11,16 @@ from spacy.tokens import Doc
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk
 import re
+import tweepy
+import logging
+import config
+
+logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
+
+auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
+auth.set_access_token(config.access_token, config.access_token_secret)
+api = tweepy.API(auth, wait_on_rate_limit=True)
+
 
 def process_tweet(tweet):
     """ Takes in a tweet JSON
@@ -37,6 +47,7 @@ def process_tweet(tweet):
         returns tag [JSON]
      """
 
+
 def strip_tweets(tweet):
     '''Process tweet text to remove retweets, mentions,links and hashtags.'''
     retweet = r'RT:? ?@\w+:?'
@@ -53,71 +64,43 @@ def strip_tweets(tweet):
     tweet= re.sub(hashtag,'',tweet)
     return tweet
 
+
 nltk.download('vader_lexicon')
 
 sentiment_analyzer = SentimentIntensityAnalyzer()
 
-def migrate_flocks(flocks):
-    cnt=0
-    start=time.time()
-    for flock in flocks:
-        cnt+=1
-        for row in range(len(flock)):
-            if row%25 ==0:
-                d_bird = dict(flock.iloc[row])
-                push_tweet(d_bird)
-                print('Tweet!')
-        clear_output()
-        print(f'Time since migration: {time.time()-start} seconds' )
-        print(f'{cnt} batches parsed!')
+
+
+
 
 def polarity_scores(doc):
     """Returns polarity score set earlier to Vader's analyzer"""
     return sentiment_analyzer.polarity_scores(doc.text)
 
+
 def graph_sentiment(text):
     tweet = nlp(strip_tweets(text))
     return tweet._.polarity_scores['compound'],tweet.vector
 
+
 def encode_sentiment(tweet):
-    sentiment,embedding = graph_sentiment(tweet['text'])
+    sentiment, embedding = graph_sentiment(tweet['text'])
     sentiment=float(sentiment)
     t_id=tweet['id_str']
-    if not isinstance(tweet['retweeted_status'],dict):
+    if not isinstance(tweet['retweeted_status'], dict):
         query = '''MERGE (t:Tweet {id_str: $id})
         ON CREATE SET t.stranded = 1 
         ON MATCH SET t.sentiment = $sentiment,
             t.embedding = $embedding
         '''
-        graph.run(query,id=t_id,sentiment=sentiment,embedding=list(embedding))
+        graph.run(query, id=t_id, sentiment=sentiment, embedding=list(embedding))
         print('Sentimental')
 
 
 Doc.set_extension('polarity_scores', getter=polarity_scores)
 
-graph = Graph("bolt://localhost:7687", auth=("neo4j", "password")) 
+graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
 
-tag_list = ['Joe Biden','Bernie Sanders','Kamala Harris', 'Cory Booker',
-'Elizabeth Warren',"Beto O'Rourke","Beto ORourke",'Eric Holder','Sherrod Brown',
-'Amy Klobuchar','Michael Bloomberg','John Hickenlooper','Kirsten Gillibrand',
-'Andrew Yang','Julian Castro','Julián Castro','Eric Swalwell','Tulsi Gabbard',
-'Jay Inslee','Pete Buttigieg', 'John Delaney','Mike Gravel','Wayne Messam',
-'Tim Ryan','Marianne Willamson','Stacy Abrams','Mayor Pete']
-
-
-user_list = ['JoeBiden','BernieSanders','KamalaHarris','CoryBooker',
-'ewarren','BetoORourke','EricHolder','SherrodBrown','amyklobuchar',
-'MikeBloomberg','Hickenlooper','SenGillibrand','AndrewYang','JulianCastro',
-'ericswalwell','TulsiGabbard','JayInslee','PeteButtigieg','JohnDelaney',
-'MikeGravel','WayneMessam','TimRyan','marwilliamson','staceyabrams']
-
-tag_list += ["@"+name for name in user_list]
-
-
-user_ids = ['939091','216776631','30354991','15808765','357606935','342863309','3333055535',
-'24768753','33537967','16581604','117839957','72198806','2228878592','19682187','377609596',
-'26637348','21789463','226222147','426028646','14709326','33954145','466532637','21522338',
-'216065430']
 
 def get_timestamp(dt_ish):
     """Returns DateTime value"""
@@ -162,6 +145,7 @@ def mentions_to_nodes(ents):
             each.pop('indices')
             out.append(user_dtn(each))
     return out
+
 
 def urls_to_nodes(ents):
     """Returns list of Url nodes"""
@@ -246,7 +230,7 @@ def separate_children(tweet):
 def push_tweet(tweetdict):
     dicts = separate_children(tweetdict)
     tx = graph.begin()
-    cypher = graph.cypher
+    # cypher = graph.cypher
 
     if isinstance(dicts['user'], dict):
         user = user_dtn(dicts['user'])
@@ -342,7 +326,7 @@ def push_tweet(tweetdict):
         #                       usrFollowerCount= user['followers_count'], usrFavoritesCount = user['favourites_count'])
 
         # Creates relationship U->U for a retweet
-        cypher.run("MATCH (a:User {id:\'" + user['id'] + "\'}), (b:User {id:\'" + rtuser['id'] + "\'}) \
+        graph.evaluate("MATCH (a:User {id:\'" + str(user['id']) + "\'}), (b:User {id:\'" + str(rtuser['id']) + "\'}) \
                     MERGE (a)-[r:RETWEETS]->(b) \
                     ON CREATE SET r.count = 1 \
                     WITH r \
@@ -435,4 +419,154 @@ def push_tweet(tweetdict):
                     tx.merge(entity, str(label), primary_key=entity.__primarykey__)
                     tx.merge(contains)
         tx.commit()
-    tx.close()
+    # tx.close()
+
+
+def listen(terms, amount):
+    cnt = 0
+    start = time.time()
+    for term in terms:
+        for tweet in tweepy.Cursor(api.search, q=term, count=amount, tweet_mode='extended').items(amount):
+            try:
+                cnt += 1
+                push_tweet(status_to_dict(tweet))
+                if cnt%25 == 0:
+                    print('TweettWEEt')
+                    print(f'Time since migration: {time.time() - start} seconds')
+                    print(f'{cnt} songs captured.')
+                # tweet_ = dict()
+                # tweet_['created_at'] = tweet.created_at
+                # tweet_['text'] = tweet.full_text
+                # if tweet.lang:
+                #     tweet_['lang'] = tweet.lang
+                # if tweet.in_reply_to_status_id:
+                #     tweet_['in_reply_to_status_id'] = tweet.in_reply_to_status_id
+                # if tweet.in_reply_to_user_id:
+                #     tweet_['in_reply_to_user_id'] = tweet.in_reply_to_user_id
+                # if tweet.retweet_count:
+                #     tweet_['retweet_count'] = tweet.retweet_count
+                # else:
+                #     tweet_['retweet_count'] = 0
+                # if tweet.favorite_count:
+                #     tweet_['favorite_count'] = tweet.favorite_count
+                # else:
+                #     tweet_['favorite_count'] = 0
+                # tweet_['user_id'] = tweet.user.id
+                # tweet_['coordinates'] = tweet.coordinates
+                # hash_tag = re.search(r'\#\w*',tweet.full_text)
+                # if hash_tag:
+                #     if isinstance(hash_tag,list):
+                #         # for tag in hash_tag: hash_tags.add(tag)
+                #         tweet_['hashtags']= hash_tag
+                #     else:
+                #         # hash_tags.add(hash_tag)
+                #         tweet_['hashtags']= [hash_tag]
+                # tweets[int(tweet.id)] = tweet_
+            except Exception as e:
+                print(e)
+                print(tweet)
+                logging.error(f'Error: {e}\nFailed term: {term}Failed tweet: {tweet}')
+                continue
+            #
+            # try:
+            #     user_ = dict()
+            #     user_['screen_name'] = tweet.user.screen_name
+            #     user_['followers_count'] = tweet.user.followers_count
+            #     user_['verified'] = tweet.user.verified
+            #     user_['created_at'] = tweet.user.created_at
+            #     if tweet.user.lang:
+            #         user_['lang'] = tweet.user.lang
+            #     users[int(tweet.user.id)] = user_
+            # except Exception as e:
+            #     print(e)
+            #     print(tweet)
+            #     logging.error(f'Error: {e}\nFailed term: {term} Failed user: {user}\n')
+            #     continue
+    #     print(f'Done with {term}. Currently {len(tweets)} collected from {len(users)} users.')
+    #
+    # print(f'{len(tweets)} tweets and {len(users)} users.')
+    # with open('tweets.json', 'a+') as t:
+    #     json.dump(tweets, t, default=myconverter)
+    # with open('users.json', 'a+') as u:
+    #     json.dump(users, u, default=myconverter)
+
+
+def status_to_dict(tweet):
+    try:
+        tweet_ = dict()
+        tweet_['created_at'] = tweet.created_at
+        tweet_['text'] = tweet.full_text
+        if tweet.lang:
+            tweet_['lang'] = tweet.lang
+        if 'retweeted_status' in tweet._json.keys():
+            tweet_['retweeted_status'] = status_to_dict(tweet.retweeted_status)
+        if 'quoted_status' in tweet._json.keys():
+            tweet_['quoted_status'] = status_to_dict(tweet.quoted_status)
+        if tweet.in_reply_to_status_id:
+            tweet_['in_reply_to_status_id'] = tweet.in_reply_to_status_id
+        if tweet.in_reply_to_user_id:
+            tweet_['in_reply_to_user_id'] = tweet.in_reply_to_user_id
+        if tweet.retweet_count:
+            tweet_['retweet_count'] = tweet.retweet_count
+        else:
+            tweet_['retweet_count'] = 0
+        if tweet.favorite_count:
+            tweet_['favorite_count'] = tweet.favorite_count
+        else:
+            tweet_['favorite_count'] = 0
+        tweet_['entities'] = tweet.entities
+        tweet_['user_id'] = tweet.user.id
+        tweet_['coordinates'] = tweet.coordinates
+        # hash_tag = re.search(r'\#\w*', tweet.full_text)
+        # if hash_tag:
+        #     if isinstance(hash_tag, list):
+        #         # for tag in hash_tag: hash_tags.add(tag)
+        #         tweet_['hashtags'] = hash_tag
+        #     else:
+        #         # hash_tags.add(hash_tag)
+        #         tweet_['hashtags'] = [hash_tag]
+        tweet_['id'] = int(tweet.id)
+    except Exception as e:
+        print(e)
+        print(tweet)
+        logging.error(f'Error: {e}\nFailed tweet: {tweet}\n')
+
+    try:
+        user = dict()
+        user['screen_name'] = tweet.user.screen_name
+        user['followers_count'] = tweet.user.followers_count
+        user['verified'] = tweet.user.verified
+        user['created_at'] = tweet.user.created_at
+        user['id'] = tweet.user.id
+        if tweet.user.lang:
+            user['lang'] = tweet.user.lang
+        tweet_['user'] = user
+    except Exception as e:
+        print(e)
+        print(tweet)
+        logging.error(f'Error: {e}\nFailed tweet: {tweet}\n')
+    return tweet_
+
+
+if __name__ == "__main__":
+    tag_list = ['Joe Biden', 'Bernie Sanders', 'Kamala Harris', 'Cory Booker',
+                'Elizabeth Warren', "Beto O'Rourke", "Beto ORourke", 'Eric Holder', 'Sherrod Brown',
+                'Amy Klobuchar', 'Michael Bloomberg', 'John Hickenlooper', 'Kirsten Gillibrand',
+                'Andrew Yang', 'Julian Castro', 'Julián Castro', 'Eric Swalwell', 'Tulsi Gabbard',
+                'Jay Inslee', 'Pete Buttigieg', 'John Delaney', 'Mike Gravel', 'Wayne Messam',
+                'Tim Ryan', 'Marianne Willamson', 'Stacy Abrams', 'Mayor Pete']
+
+    user_list = ['JoeBiden', 'BernieSanders', 'KamalaHarris', 'CoryBooker',
+                 'ewarren', 'BetoORourke', 'EricHolder', 'SherrodBrown', 'amyklobuchar',
+                 'MikeBloomberg', 'Hickenlooper', 'SenGillibrand', 'AndrewYang', 'JulianCastro',
+                 'ericswalwell', 'TulsiGabbard', 'JayInslee', 'PeteButtigieg', 'JohnDelaney',
+                 'MikeGravel', 'WayneMessam', 'TimRyan', 'marwilliamson', 'staceyabrams']
+
+    tag_list += ["@" + name for name in user_list]
+
+    user_ids = ['939091', '216776631', '30354991', '15808765', '357606935', '342863309', '3333055535',
+                '24768753', '33537967', '16581604', '117839957', '72198806', '2228878592', '19682187', '377609596',
+                '26637348', '21789463', '226222147', '426028646', '14709326', '33954145', '466532637', '21522338',
+                '216065430']
+
+    listen(tag_list+user_ids, 100)
