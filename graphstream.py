@@ -80,7 +80,7 @@ def polarity_scores(doc):
 
 def graph_sentiment(text):
     tweet = nlp(strip_tweets(text))
-    return tweet._.polarity_scores['compound'],tweet.vector
+    return tweet._.polarity_scores['compound'], tweet.vector
 
 
 def encode_sentiment(tweet):
@@ -425,6 +425,7 @@ def push_tweet(tweetdict):
 def listen(terms, amount):
     cnt = 0
     start = time.time()
+    hash_tags=[]
     for term in terms:
         for tweet in tweepy.Cursor(api.search, q=term, count=amount, tweet_mode='extended').items(amount):
             try:
@@ -453,19 +454,37 @@ def listen(terms, amount):
                 #     tweet_['favorite_count'] = 0
                 # tweet_['user_id'] = tweet.user.id
                 # tweet_['coordinates'] = tweet.coordinates
-                # hash_tag = re.search(r'\#\w*',tweet.full_text)
-                # if hash_tag:
-                #     if isinstance(hash_tag,list):
-                #         # for tag in hash_tag: hash_tags.add(tag)
-                #         tweet_['hashtags']= hash_tag
-                #     else:
-                #         # hash_tags.add(hash_tag)
-                #         tweet_['hashtags']= [hash_tag]
+                hash_tag = re.search(r'\#\w*',tweet.full_text)
+                if hash_tag:
+                    if isinstance(hash_tag,list):
+                        # for tag in hash_tag: hash_tags.add(tag)
+                        hash_tags.extend(hash_tag)
+                    else:
+                        # hash_tags.add(hash_tag)
+                        hash_tags.append(hash_tag)
                 # tweets[int(tweet.id)] = tweet_
             except Exception as e:
                 print(e)
-                print(tweet)
+                print(tweet._json)
                 logging.error(f'Error: {e}\nFailed term: {term}Failed tweet: {tweet}')
+                continue
+    print('Time to check out some hashtags!')
+    print(f'There are {len(hash_tags)} to check like:')
+    print(f'{" ,".join(hash_tags[:10])}')
+    start = time.time()
+    for tag in hash_tags:
+        for tweet in tweepy.Cursor(api.search, q=tag, count=amount, tweet_mode='extended').items(amount):
+            try:
+                cnt += 1
+                push_tweet(status_to_dict(tweet))
+                if cnt % 25 == 0:
+                    print('TagtAG')
+                    print(f'Time since migration back: {time.time() - start} seconds')
+                    print(f'{cnt} songs captured.')
+            except Exception as e:
+                print(e)
+                print(tweet._json)
+                logging.error(f'Error: {e}\nFailed tag: {tag}Failed tweet: {tweet}')
                 continue
             #
             # try:
@@ -549,24 +568,15 @@ def status_to_dict(tweet):
 
 
 if __name__ == "__main__":
-    tag_list = ['Joe Biden', 'Bernie Sanders', 'Kamala Harris', 'Cory Booker',
-                'Elizabeth Warren', "Beto O'Rourke", "Beto ORourke", 'Eric Holder', 'Sherrod Brown',
-                'Amy Klobuchar', 'Michael Bloomberg', 'John Hickenlooper', 'Kirsten Gillibrand',
-                'Andrew Yang', 'Julian Castro', 'Julián Castro', 'Eric Swalwell', 'Tulsi Gabbard',
-                'Jay Inslee', 'Pete Buttigieg', 'John Delaney', 'Mike Gravel', 'Wayne Messam',
-                'Tim Ryan', 'Marianne Willamson', 'Stacy Abrams', 'Mayor Pete']
+    tag_list = ['Joe Biden', 'Bernie Sanders', 'Elizabeth Warren', 'Amy Klobuchar', 'Michael Bloomberg',
+                'Andrew Yang', 'Tulsi Gabbard', 'Pete Buttigieg']
+    tag_list += [name.split()[1] for name in tag_list]
 
-    user_list = ['JoeBiden', 'BernieSanders', 'KamalaHarris', 'CoryBooker',
-                 'ewarren', 'BetoORourke', 'EricHolder', 'SherrodBrown', 'amyklobuchar',
-                 'MikeBloomberg', 'Hickenlooper', 'SenGillibrand', 'AndrewYang', 'JulianCastro',
-                 'ericswalwell', 'TulsiGabbard', 'JayInslee', 'PeteButtigieg', 'JohnDelaney',
-                 'MikeGravel', 'WayneMessam', 'TimRyan', 'marwilliamson', 'staceyabrams']
+    user_list = ['JoeBiden', 'BernieSanders', 'ewarren', 'amyklobuchar', 'MikeBloomberg', 'AndrewYang',
+                 'TulsiGabbard', 'PeteButtigieg']
 
     tag_list += ["@" + name for name in user_list]
 
-    user_ids = ['939091', '216776631', '30354991', '15808765', '357606935', '342863309', '3333055535',
-                '24768753', '33537967', '16581604', '117839957', '72198806', '2228878592', '19682187', '377609596',
-                '26637348', '21789463', '226222147', '426028646', '14709326', '33954145', '466532637', '21522338',
-                '216065430']
+    user_ids = ['939091', '216776631', '357606935', '33537967', '16581604', '2228878592', '26637348', '226222147']
 
     listen(tag_list+user_ids, 100)
