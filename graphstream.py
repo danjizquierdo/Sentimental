@@ -12,6 +12,31 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk
 import re
 
+def process_tweet(tweet):
+    """ Takes in a tweet JSON
+    Parses out User information
+    Retains original version of tweet text then increments processing:
+        Finds each Hashtag and keeps it as a list
+            Create edge information
+        Removes each mention and keeps it as a list
+            Label mention as Obj or Subj
+            Create edge information
+        Clean up rest of text
+        Sentiment analysis
+            Clean/split hashtags into semantic words/phrases then remove
+    Final cleaned text
+        Word clouds
+        Topic modeling
+
+
+     Requirements:
+        returns User [JSON]
+        returns tweet JSON
+        returns edge [JSON]
+        returns table JSON
+        returns tag [JSON]
+     """
+
 def strip_tweets(tweet):
     '''Process tweet text to remove retweets, mentions,links and hashtags.'''
     retweet = r'RT:? ?@\w+:?'
@@ -47,6 +72,7 @@ def migrate_flocks(flocks):
         print(f'{cnt} batches parsed!')
 
 def polarity_scores(doc):
+    """Returns polarity score set earlier to Vader's analyzer"""
     return sentiment_analyzer.polarity_scores(doc.text)
 
 def graph_sentiment(text):
@@ -94,37 +120,42 @@ user_ids = ['939091','216776631','30354991','15808765','357606935','342863309','
 '216065430']
 
 def get_timestamp(dt_ish):
+    """Returns DateTime value"""
     if isinstance(dt_ish,str):
         return pd.to_datetime(dt_ish).timestamp()
     else:
         return dt_ish.timestamp()
 
 
-def dict_to_node(datadict,*labels,primarykey=None,primarylabel=None,):
-    if 'created_at' in datadict:
-        datadict['timestamp']=get_timestamp(datadict['created_at'])
-    cleandict={}
-    for key,value in datadict.items():
-        if isinstance(datadict[key],np.int64):
+def dict_to_node(datadict, *labels, primarykey=None, primarylabel=None,):
+    if 'created_at' in datadict.keys():
+        datadict['timestamp'] = get_timestamp(datadict['created_at'])
+    cleandict = {}
+    for key, value in datadict.items():
+        if isinstance(datadict[key], np.int64):
             cleandict[key] = int(datadict[key])
         elif not isinstance(datadict[key],(int,str,float)):
             cleandict[key] = str(datadict[key])
         else:
             cleandict[key] = datadict[key]
 
-    node = Node(*labels,**cleandict)
-    node.__primarylabel__= primarylabel or labels[0]
-    node.__primarykey__= primarykey
+    node = Node(*labels, **cleandict)
+    node.__primarylabel__ = primarylabel or labels[0]
+    node.__primarykey__ = primarykey
     return node
 
+
 def hashtags_to_nodes(ents):
+    """Returns list of Hashtag nodes"""
     out= []
     if ents['hashtags']:
         for each in ents['hashtags']:
-            out.append(dict_to_node(each,'Hashtag',primarykey='text',))
+            out.append(dict_to_node(each, 'Hashtag', primarykey='text', primarylabel='Hashtag'))
     return out
 
+
 def mentions_to_nodes(ents):
+    """Returns list of User nodes"""
     out=[]
     if ents['user_mentions']:
         for each in ents['user_mentions']:
@@ -133,260 +164,275 @@ def mentions_to_nodes(ents):
     return out
 
 def urls_to_nodes(ents):
+    """Returns list of Url nodes"""
     out=[]
     if ents['urls']:
         for each in ents['urls']:
             each.pop('indices')
-            out.append(dict_to_node(each,'Url',primarykey='expanded_url',primarylabel='Url'))
+            out.append(dict_to_node(each, 'Url', primarykey='expanded_url', primarylabel='Url'))
     return out
 
-def media_to_nodes(ents):
-    out= []
-    if ents['media']:
-        for each in ents['media']:
-            each.pop('indices')
-            out.append(dict_to_node(each,'Media',each['type'].title(),primarykey='id',primarylabel='Media'))
-    return out
+# def media_to_nodes(ents):
+#     out= []
+#     if ents['media']:
+#         for each in ents['media']:
+#             each.pop('indices')
+#             out.append(dict_to_node(each,'Media',each['type'].title(),primarykey='id',primarylabel='Media'))
+#     return out
+
 
 def ent_parser(ents):
-    output={}
+    """Returns dictionary of Hashtag, Mention and Url nodes"""
+    output = {}
     dents = defaultdict(int)
     dents.update(ents)
-    output['hashtags']= hashtags_to_nodes(dents)
-    output['mentions']= mentions_to_nodes(dents)
-    output['urls']= urls_to_nodes(dents)
-    output['media']= media_to_nodes(dents)
-    return {k:v for (k,v) in output.items() if v}
+    output['hashtags'] = hashtags_to_nodes(dents)
+    output['mentions'] = mentions_to_nodes(dents)
+    output['urls'] = urls_to_nodes(dents)
+    # output['media']= media_to_nodes(dents)
+    return {k: v for (k, v) in output.items() if v}
+
 
 def user_dtn(datadict):
-#     if datadict['id'] in user_ids:
-#         return dict_to_node(datadict,'Target',primarykey='id',primarylabel='User',)
-    return dict_to_node(datadict,'User',primarykey='id',primarylabel='User')
+    # if datadict['id'] in user_ids:
+    #     return dict_to_node(datadict,'Target',primarykey='id',primarylabel='User',)
+    return dict_to_node(datadict, 'User', primarykey='id', primarylabel='User')
 
 
-
-def seperate_children(tweet):
+def separate_children(tweet):
     try:
         retweeted = tweet.pop('retweeted_status')
-    except:
+    except KeyError:
         retweeted = []
     try:
         quoted = tweet.pop('quoted_status')
-    except:
+    except KeyError:
         quoted = []
-
-    output=defaultdict(int)
+    output = defaultdict(int)
     try:
         output['user'] = tweet.pop('user')
-    except:
-        output['user']=[]
+    except KeyError:
+        output['user'] = []
     try:
         output['ents'] = tweet.pop('entities')
-    except:
+    except KeyError:
         output['ents'] = []
     output['tweet'] = dict(tweet)
 
-    if isinstance(retweeted,dict) and isinstance(quoted,dict):
+    if isinstance(retweeted, dict) and isinstance(quoted, dict):
         retweeted.pop('quoted_status')
         output['qtuser'] = quoted.pop('user')
         output['qents'] = quoted.pop('entities')
 
-        output['rtuser'] =retweeted.pop('user')
-        output['rents']=retweeted.pop('entities')
+        output['rtuser'] = retweeted.pop('user')
+        output['rents'] = retweeted.pop('entities')
         output['retweeted'] = retweeted
 
         output['quoted'] = quoted
 
-    elif isinstance(quoted,dict):
+    elif isinstance(quoted, dict):
         output['qtuser'] = quoted.pop('user')
         output['qents'] = quoted.pop('entities')
         output['quoted'] = quoted
 
-
-    elif isinstance(retweeted,dict):
-        output['rtuser']= retweeted.pop('user')
-        output['rents']= retweeted.pop('entities')
-        output['retweeted']=retweeted
+    elif isinstance(retweeted, dict):
+        output['rtuser'] = retweeted.pop('user')
+        output['rents'] = retweeted.pop('entities')
+        output['retweeted'] = retweeted
 
     return output
 
+
 def push_tweet(tweetdict):
-    dicts=seperate_children(tweetdict)
+    dicts = separate_children(tweetdict)
     tx = graph.begin()
-    if isinstance(dicts['user'],dict):
-        user =  user_dtn(dicts['user'])
+    cypher = graph.cypher
+
+    if isinstance(dicts['user'], dict):
+        user = user_dtn(dicts['user'])
     else:
         gaffer = user_dtn(dicts['tweet']['delete']['status'])
-        regret = dict_to_node(dicts['tweet']['delete']['status'],'Tweet')
-        deleted = Relationship(gaffer,'DELETES',regret,timestamp=dicts['tweet']['delete']['timestamp_ms'])
-        tx.merge(gaffer,primary_key='id')
-        tx.merge(regret,primary_key='id')
+        regret = dict_to_node(dicts['tweet']['delete']['status'], 'Tweet')
+        deleted = Relationship(gaffer, 'DELETES', regret, timestamp=dicts['tweet']['delete']['timestamp_ms'])
+        tx.merge(gaffer, primary_key='id')
+        tx.merge(regret, primary_key='id')
         tx.merge(deleted)
         tx.commit()
-        return
+        return True
         
-    tweet = dict_to_node(dicts['tweet'],'Tweet')
+    tweet = dict_to_node(dicts['tweet'], 'Tweet')
 
-    tx.merge(user,primary_key='id')
+    # tx.merge(user, primary_key='id')
 
+    # if 'retweeted' in dicts.keys() and 'quoted' in dicts.keys():
+    #     tweet.add_label('Retweet')
+    #     retweet = dict_to_node(dicts['retweeted'],'Tweet','Qtweet')
+    #     quoted = dict_to_node(dicts['quoted'], 'Tweet')
+    #     rtuser = user_dtn(dicts['rtuser'])
+    #     qtuser = user_dtn(dicts['qtuser'])
+    #
+    #     tweeted = Relationship(user,'TWEETS', tweet, timestamp= tweet['timestamp'],
+    #                            created_at = tweet['created_at'], usrStatusCount= user['statuses_count'],
+    #                           usrFollowerCount= user['followers_count'], usrFavoritesCount = user['favourites_count'])
+    #
+    #     tweeted2 = Relationship(rtuser,'TWEETS', retweet,timestamp= retweet['timestamp'],
+    #                             created_at = retweet['created_at'], usrStatusCount= rtuser['statuses_count'],
+    #                           usrFollowerCount= rtuser['followers_count'],
+    #                           usrFavoritesCount = rtuser['favourites_count'])
+    #
+    #     tweeted3 = Relationship(qtuser,'TWEETS',quoted, timestamp= quoted['timestamp'],
+    #                             created_at = quoted['created_at'], usrStatusCount= qtuser['statuses_count'],
+    #                           usrFollowerCount= qtuser['followers_count'],
+    #                           usrFavoritesCount = qtuser['favourites_count'])
+    #
+    #     retweeted = Relationship(tweet,'RETWEETS',retweet, timestamp= tweet['timestamp'],
+    #                               favcount=retweet['favorite_count'], createdAt=tweet['created_at'],
+    #                             replyCount= retweet['reply_count'], sourceFollowers = rtuser['followers_count'],
+    #                             retweetCount=retweet['retweet_count'],quoteCount=retweet['quote_count'])
+    #
+    #     quotes = Relationship(retweet,'QUOTES',quoted,timestamp= quoted['timestamp'],
+    #                             favcount=quoted['favourites_count'],
+    #                             replyCount= quoted['reply_count'], sourceFollowers = qtuser['followers_count'],
+    #                             createdAt= retweet['created_at'],
+    #                             retweetCount=quoted['retweet_count'],quoteCount=quoted['quote_count'])
+    #
+    #     tx.merge(tweet,primary_key='id')
+    #     tx.merge(user,primary_key='id')
+    #     tx.merge(tweeted)
+    #
+    #
+    #     tx.merge(rtuser,primary_key = 'id')
+    #     tx.merge(retweet,primary_key='id')
+    #     tx.merge(tweeted2)
+    #
+    #     tx.merge(qtuser,primary_key='id')
+    #     tx.merge(quoted,primary_key='id')
+    #     tx.merge(retweeted)
+    #     tx.merge(tweeted3)
+    #     tx.merge(quotes)
+    #
+    #     for ent,ls in ent_parser(dicts['rents']).items():
+    #         for each in ls:
+    #             contains= Relationship(retweet,'CONTAINS',each)
+    #             tx.merge(each,ent,primary_key=each.__primarykey__)
+    #             tx.merge(contains)
+    #
+    #     for ent,ls in ent_parser(dicts['qents']).items():
+    #         if ls:
+    #             for each in ls:
+    #
+    #                 contains= Relationship(quoted,'CONTAINS',each)
+    #                 tx.merge(each,ent, primary_key=each.__primarykey__)
+    #                 tx.merge(contains)
+    #
+    #     for ent,ls in ent_parser(dicts['rents']).items():
+    #         if ls:
+    #             for each in ls:
+    #                 contains= Relationship(retweet,'CONTAINS',each)
+    #                 tx.merge(each,ent,primary_key=each.__primarykey__)
+    #                 tx.merge(contains)
 
-    if 'retweeted' in dicts.keys() and 'quoted' in dicts.keys():
-        tweet.add_label('Retweet')
-        retweet = dict_to_node(dicts['retweeted'],'Tweet','Qtweet')
-        quoted = dict_to_node(dicts['quoted'], 'Tweet')
-        rtuser = user_dtn(dicts['rtuser'])
-        qtuser = user_dtn(dicts['qtuser'])
-
-        tweeted = Relationship(user,'TWEETS', tweet, timestamp= tweet['timestamp'],
-                               created_at = tweet['created_at'], usrStatusCount= user['statuses_count'],
-                              usrFollowerCount= user['followers_count'], usrFavoritesCount = user['favourites_count'])
-
-        tweeted2 = Relationship(rtuser,'TWEETS', retweet,timestamp= retweet['timestamp'],
-                                created_at = retweet['created_at'], usrStatusCount= rtuser['statuses_count'],
-                              usrFollowerCount= rtuser['followers_count'], usrFavoritesCount = rtuser['favourites_count'])
-
-        tweeted3 = Relationship(qtuser,'TWEETS',quoted, timestamp= quoted['timestamp'],
-                                created_at = quoted['created_at'], usrStatusCount= qtuser['statuses_count'],
-                              usrFollowerCount= qtuser['followers_count'], usrFavoritesCount = qtuser['favourites_count'])
-
-        retweeted = Relationship(tweet,'RETWEETS',retweet, timestamp= tweet['timestamp'], favcount=retweet['favorite_count'],
-                                 createdAt=tweet['created_at'],
-                                replyCount= retweet['reply_count'], sourceFollowers = rtuser['followers_count'],
-                                retweetCount=retweet['retweet_count'],quoteCount=retweet['quote_count'])
-
-        quotes = Relationship(retweet,'QUOTES',quoted,timestamp= quoted['timestamp'],
-                                favcount=quoted['favourites_count'],
-                                replyCount= quoted['reply_count'], sourceFollowers = qtuser['followers_count'], createdAt= retweet['created_at'],
-                                retweetCount=quoted['retweet_count'],quoteCount=quoted['quote_count'])
-
-        tx.merge(tweet,primary_key='id')
-        tx.merge(user,primary_key='id')
-        tx.merge(tweeted)
-
-
-        tx.merge(rtuser,primary_key = 'id')
-        tx.merge(retweet,primary_key='id')
-        tx.merge(tweeted2)
-
-        tx.merge(qtuser,primary_key='id')
-        tx.merge(quoted,primary_key='id')
-        tx.merge(retweeted)
-        tx.merge(tweeted3)
-        tx.merge(quotes)
-
-#         for ent,ls in ent_parser(dicts['rents']).items():
-#             for each in ls:
-#                 contains= Relationship(retweet,'CONTAINS',each)
-#                 tx.merge(each,ent,primary_key=each.__primarykey__)
-#                 tx.merge(contains)
-
-        for ent,ls in ent_parser(dicts['qents']).items():
-            if ls:
-                for each in ls:
-
-                    contains= Relationship(quoted,'CONTAINS',each)
-                    tx.merge(each,ent, primary_key=each.__primarykey__)
-                    tx.merge(contains)
-
-        for ent,ls in ent_parser(dicts['rents']).items():
-            if ls:
-                for each in ls:
-                    contains= Relationship(retweet,'CONTAINS',each)
-                    tx.merge(each,ent,primary_key=each.__primarykey__)
-                    tx.merge(contains)
-
-
-
-    elif 'retweeted' in dicts.keys():
-        tweet.add_label('Retweet')
+    if 'retweeted' in dicts.keys():
+        # tweet.add_label('Retweet')
         rtuser = user_dtn(dicts['rtuser'])
         retweet = dict_to_node(dicts['retweeted'],'Tweet')
 
+        # tweeted = Relationship(user,'RETWEETS', rtuser, timestamp= tweet['timestamp'],
+        #                        created_at = tweet['created_at'], usrStatusCount= user['statuses_count'],
+        #                       usrFollowerCount= user['followers_count'], usrFavoritesCount = user['favourites_count'])
 
-        tweeted = Relationship(user,'TWEETS',tweet, timestamp= tweet['timestamp'],
-                               created_at = tweet['created_at'], usrStatusCount= user['statuses_count'],
-                              usrFollowerCount= user['followers_count'], usrFavoritesCount = user['favourites_count'])
+        # Creates relationship U->U for a retweet
+        cypher.run("MATCH (a:User {id:\'" + user['id'] + "\'}), (b:User {id:\'" + rtuser['id'] + "\'}) \
+                    MERGE (a)-[r:RETWEETS]->(b) \
+                    ON CREATE SET r.count = 1 \
+                    WITH r \
+                    CALL apoc.atomic.add(r, 'count', 1) YIELD newValue \
+                    RETURN r")
 
-        tweeted2 = Relationship(rtuser,'TWEETS',retweet,timestamp= retweet['timestamp'],
-                                created_at = retweet['created_at'], usrStatusCount= rtuser['statuses_count'],
-                              usrFollowerCount= rtuser['followers_count'], usrFavoritesCount = rtuser['favourites_count'])
-#         retweeted = Relationship(tweet,'RETWEETS',retweet,timestamp= retweet['timestamp'],
-#                                 created_at = retweet['created_at'])
-        retweeted = Relationship(tweet,'RETWEETS',retweet, timestamp= tweet['timestamp'], favcount=retweet['favourites_count'],
-                                replyCount= retweet['reply_count'], sourceFollowers = rtuser['followers_count'], createdAt= tweet['created_at'],
-                                retweetCount=retweet['retweet_count'],quoteCount=retweet['quote_count'])
+        # Need to update table database with new stats from the time of the retweet
 
-        tx.merge(user,primary_key='id')
-        tx.merge(tweet,primary_key='id')
-        tx.merge(tweeted)
-        tx.merge(rtuser,primary_key = 'id')
-        tx.merge(retweet,primary_key='id')
+        tweeted2 = Relationship(rtuser,'TWEETS', retweet, timestamp=retweet['timestamp'],
+                                created_at=retweet['created_at'], usrStatusCount=rtuser['statuses_count'],
+                                usrFollowerCount=rtuser['followers_count'],
+                                usrFavoritesCount=rtuser['favourites_count'])
+        # retweeted = Relationship(tweet,'RETWEETS',retweet,timestamp= retweet['timestamp'],
+        #                         created_at = retweet['created_at'])
+        # retweeted = Relationship(tweet,'RETWEETS',retweet, timestamp= tweet['timestamp'], favcount=retweet['favourites_count'],
+        #                         replyCount= retweet['reply_count'], sourceFollowers = rtuser['followers_count'], createdAt= tweet['created_at'],
+        #                         retweetCount=retweet['retweet_count'],quoteCount=retweet['quote_count'])
+
+        # tx.merge(user,primary_key='id')
+        # tx.merge(tweet,primary_key='id')
+        # tx.merge(tweeted)
+        tx.merge(rtuser, primary_key='id')
+        tx.merge(retweet, primary_key='id')
         tx.merge(tweeted2)
-        tx.merge(retweeted)
-        for ent,ls in ent_parser(dicts['rents']).items():
-            if ls:
-                for each in ls:
-                    contains= Relationship(retweet,'CONTAINS',each)
-                    tx.merge(each,ent,primary_key=each.__primarykey__)
+        # tx.merge(retweeted)
+        for label, entities in ent_parser(dicts['rents']).items():
+            # Goes through each entity and creates a relationship from the original tweet that contained it
+            # and from the broadcasting User
+            if entities:
+                for entity in entities:
+                    contains = Relationship(retweet, 'CONTAINS', entity)
+                    tx.merge(entity, str(label), primary_key=entity.__primarykey__)
                     tx.merge(contains)
-
-
+                    u_retweet = Relationship(rtuser, 'BROADCASTS', entity)
+                    tx.merge(u_retweet)
 
     elif 'quoted' in dicts.keys():
         tweet.add_label('Qtweet')
         qtuser = user_dtn(dicts['qtuser'])
-        quoted = dict_to_node(dicts['quoted'],'Tweet')
+        quoted = dict_to_node(dicts['quoted'], 'Tweet')
 
-        tweeted = Relationship(user,'TWEETS',tweet, timestamp= tweet['timestamp'],
-                               created_at = tweet['created_at'], usrStatusCount= user['statuses_count'],
-                              usrFollowerCount= user['followers_count'], usrFavoritesCount = user['favourites_count'])
+        tweeted = Relationship(user, 'TWEETS', tweet, timestamp=tweet['timestamp'],
+                               created_at=tweet['created_at'], usrStatusCount=user['statuses_count'],
+                               usrFollowerCount=user['followers_count'], usrFavoritesCount=user['favourites_count'])
 
-        tweeted2 = Relationship(qtuser,'TWEETS',quoted,timestamp= quoted['timestamp'],
-                                created_at = quoted['created_at'], usrStatusCount= qtuser['statuses_count'],
-                              usrFollowerCount= qtuser['followers_count'], usrFavoritesCount = qtuser['favourites_count'])
+        tweeted2 = Relationship(qtuser, 'TWEETS', quoted, timestamp=quoted['timestamp'],
+                                created_at=quoted['created_at'], usrStatusCount=qtuser['statuses_count'],
+                                usrFollowerCount=qtuser['followers_count'],
+                                usrFavoritesCount=qtuser['favourites_count'])
 
-        quotes = Relationship(tweet,'QUOTES',quoted, timestamp= tweet['timestamp'], favcount=quoted['favourites_count'],
-                                replyCount= quoted['reply_count'], sourceFollowers = qtuser['followers_count'], createdAt= tweet['created_at'],
-                                retweetCount=quoted['retweet_count'],quoteCount=quoted['quote_count'])
+        quotes = Relationship(tweet, 'QUOTES', quoted, timestamp=tweet['timestamp'],
+                                favcount=quoted['favourites_count'], replyCount=quoted['reply_count'],
+                                sourceFollowers=qtuser['followers_count'], createdAt=tweet['created_at'],
+                                retweetCount=quoted['retweet_count'], quoteCount=quoted['quote_count'])
 
-        tx.merge(tweet,primary_key='id')
-        tx.merge(user,primary_key='id')
+        tx.merge(tweet, primary_key='id')
+        tx.merge(user, primary_key='id')
         tx.merge(tweeted)
-        tx.merge(qtuser,primary_key='id')
-        tx.merge(quoted,primary_key='id')
+        tx.merge(qtuser, primary_key='id')
+        tx.merge(quoted, primary_key='id')
         tx.merge(tweeted2)
         tx.merge(quotes)
 
-        for ent,ls in ent_parser(dicts['ents']).items():
-            if ls:
-                for each in ls:
-                    contains= Relationship(tweet,'CONTAINS',each)
-                    tx.merge(each,ent,primary_key=each.__primarykey__)
+        for label, entities in ent_parser(dicts['ents']).items():
+            if entities:
+                for entity in entities:
+                    contains = Relationship(tweet, 'CONTAINS', entity)
+                    tx.merge(entity, str(label), primary_key=entity.__primarykey__)
                     tx.merge(contains)
 
-        for ent,ls in ent_parser(dicts['qents']).items():
-            if ls:
-                for each in ls:
-                    contains= Relationship(quoted,'CONTAINS',each)
-                    tx.merge(each,ent,primary_key=each.__primarykey__)
+        for label, entities in ent_parser(dicts['qents']).items():
+            if entities:
+                for entity in entities:
+                    contains = Relationship(quoted, 'CONTAINS', entity)
+                    tx.merge(entity, str(label), primary_key=entity.__primarykey__)
                     tx.merge(contains)
-
-
-#     subg = tweeted
+        tx.commit()
 
     else:
-        tweeted = Relationship(user,'TWEETS',tweet, timestamp= tweet['timestamp'],
-                               created_at = tweet['created_at'], usrStatusCount= user['statuses_count'],
-                              usrFollowerCount= user['followers_count'], usrFavoritesCount = user['favourites_count'])
-        tx.merge(tweet,primary_key='id')
-        tx.merge(user,primary_key='id')
+        tweeted = Relationship(user, 'TWEETS', tweet, timestamp=tweet['timestamp'],
+                               created_at=tweet['created_at'], usrStatusCount=user['statuses_count'],
+                               usrFollowerCount=user['followers_count'], usrFavoritesCount=user['favourites_count'])
+        tx.merge(tweet, primary_key='id')
+        tx.merge(user, primary_key='id')
         tx.merge(tweeted)
-        for ent,ls in ent_parser(dicts['ents']).items():
-            if ls:
-                for each in ls:
-                    contains= Relationship(tweet,'CONTAINS',each)
-        #             subg = subg | contains
-                    tx.merge(each,str(ent),primary_key=each.__primarykey__)
+        for label, entities in ent_parser(dicts['ents']).items():
+            if entities:
+                for entity in entities:
+                    contains = Relationship(tweet, 'CONTAINS', entity)
+                    tx.merge(entity, str(label), primary_key=entity.__primarykey__)
                     tx.merge(contains)
-
-    tx.commit()
+        tx.commit()
+    tx.close()
