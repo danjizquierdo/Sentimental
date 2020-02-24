@@ -1,27 +1,89 @@
-from py2neo import Graph
+import pandas as pd
+import numpy as np
+from collections import defaultdict
+from py2neo import Graph, Node, Relationship
 import jsonlines
-import tweepy
+import spacy
+from spacy.tokens import Doc
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+import nltk
+import re
 import logging
-import config
-import sys
 from datetime import datetime
-import time
-from math import floor
-import asyncio
 import os
+from math import floor
+import shutil
 
-logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
+logging.basicConfig(filename='neo4j_errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
+
+
+def strip_tweets(tweet):
+    '''Process tweet text to remove retweets, mentions,links and hashtags.'''
+    retweet = r'RT:? ?@\w+:?'
+    tweet = re.sub(retweet, '', tweet)
+    mention = r'@\w+'
+    tweet = re.sub(mention, '', tweet)
+    links = r'^(http:\/\/www\.|https:\/\/www\.|http:\/\/|https:\/\/)?[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$'
+    tweet = re.sub(links, '', tweet)
+    tweet_links = r'https:\/\/t\.co\/\w+|http:\/\/t\.co\/\w+'
+    tweet = re.sub(tweet_links, '', tweet)
+    tweet_link = r'http\S+'
+    tweet = re.sub(tweet_link, '', tweet)
+    hashtag = r'#\w+'
+    tweet = re.sub(hashtag, '', tweet)
+    return tweet
+
+
+nltk.download('vader_lexicon')
+
+sentiment_analyzer = SentimentIntensityAnalyzer()
+
+
+def polarity_scores(doc):
+    """Returns polarity score set earlier to Vader's analyzer"""
+    return sentiment_analyzer.polarity_scores(doc.text)
+
+
+def graph_sentiment(text):
+    tweet = nlp(strip_tweets(text))
+    return tweet._.polarity_scores['compound'], tweet.vector
+
+
+def encode_sentiment(tweet):
+    sentiment, embedding = graph_sentiment(tweet['text'])
+    sentiment = float(sentiment)
+    t_id = tweet['id_str']
+    if not isinstance(tweet['retweeted_status'], dict):
+        query = '''MERGE (t:Tweet {id_str: $id})
+        ON CREATE SET t.stranded = 1 
+        ON MATCH SET t.sentiment = $sentiment,
+            t.embedding = $embedding
+        '''
+        graph.run(query, id=t_id, sentiment=sentiment, embedding=list(embedding))
+        print('Sentimental')
+
+
+Doc.set_extension('polarity_scores', getter=polarity_scores)
+
 graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
 
 
-def dict_to_node(datadict, *labels, primarykey=None, primarylabel=None,):
+def get_timestamp(dt_ish):
+    """Returns DateTime value"""
+    if isinstance(dt_ish, str):
+        return pd.to_datetime(dt_ish).timestamp()
+    else:
+        return dt_ish.timestamp()
+
+
+def dict_to_node(datadict, *labels, primarykey=None, primarylabel=None, ):
     # if 'created_at' in datadict.keys():
     #     datadict['timestamp'] = get_timestamp(datadict['created_at'])
     cleandict = {}
     for key, value in datadict.items():
         if isinstance(datadict[key], np.int64):
             cleandict[key] = int(datadict[key])
-        elif not isinstance(datadict[key],(int,str,float)):
+        elif not isinstance(datadict[key], (int, str, float)):
             cleandict[key] = str(datadict[key])
         else:
             cleandict[key] = datadict[key]
@@ -34,7 +96,7 @@ def dict_to_node(datadict, *labels, primarykey=None, primarylabel=None,):
 
 def hashtags_to_nodes(ents):
     """Returns list of Hashtag nodes"""
-    out= []
+    out = []
     if ents['hashtags']:
         for each in ents['hashtags']:
             out.append(dict_to_node(each, 'Hashtag', primarykey='text', primarylabel='Hashtag'))
@@ -43,7 +105,7 @@ def hashtags_to_nodes(ents):
 
 def mentions_to_nodes(ents):
     """Returns list of User nodes"""
-    out=[]
+    out = []
     if ents['user_mentions']:
         for each in ents['user_mentions']:
             each.pop('indices')
@@ -53,7 +115,7 @@ def mentions_to_nodes(ents):
 
 def urls_to_nodes(ents):
     """Returns list of Url nodes"""
-    out=[]
+    out = []
     if ents['urls']:
         for each in ents['urls']:
             each.pop('indices')
@@ -138,12 +200,12 @@ def push_tweet(tweetdict):
         tx.merge(deleted)
         tx.commit()
         return True
-        
+
     tweet = dict_to_node(dicts['tweet'], 'Tweet')
 
     if 'retweeted' in dicts.keys():
         rtuser = user_dtn(dicts['rtuser'])
-        retweet = dict_to_node(dicts['retweeted'],'Tweet')
+        retweet = dict_to_node(dicts['retweeted'], 'Tweet')
 
         # Creates relationship U->U for a retweet
         graph.evaluate("MATCH (a:User {id:\'" + str(user['id']) + "\'}), (b:User {id:\'" + str(rtuser['id']) + "\'}) \
@@ -155,7 +217,7 @@ def push_tweet(tweetdict):
 
         # Need to update table database with new stats from the time of the retweet
 
-        tweeted2 = Relationship(rtuser,'TWEETS', retweet, timestamp=retweet['timestamp'],
+        tweeted2 = Relationship(rtuser, 'TWEETS', retweet, timestamp=retweet['timestamp'],
                                 created_at=retweet['created_at'], usrStatusCount=rtuser['statuses_count'],
                                 usrFollowerCount=rtuser['followers_count'],
                                 usrFavoritesCount=rtuser['favourites_count'])
@@ -188,9 +250,9 @@ def push_tweet(tweetdict):
                                 usrFavoritesCount=qtuser['favourites_count'])
 
         quotes = Relationship(tweet, 'QUOTES', quoted, timestamp=tweet['timestamp'],
-                                favcount=quoted['favourites_count'], replyCount=quoted['reply_count'],
-                                sourceFollowers=qtuser['followers_count'], createdAt=tweet['created_at'],
-                                retweetCount=quoted['retweet_count'], quoteCount=quoted['quote_count'])
+                              favcount=quoted['favourites_count'], replyCount=quoted['reply_count'],
+                              sourceFollowers=qtuser['followers_count'], createdAt=tweet['created_at'],
+                              retweetCount=quoted['retweet_count'], quoteCount=quoted['quote_count'])
 
         tx.merge(tweet, primary_key='id')
         tx.merge(user, primary_key='id')
@@ -230,12 +292,11 @@ def push_tweet(tweetdict):
                     tx.merge(contains)
         tx.commit()
     return tweetdict['text']
-    # tx.close()
 
 
 def listen(status):
     try:
-        full_text = push_tweet(status_to_dict(status))
+        full_text = push_tweet(status)
         hash_tag = re.search(r'\#\w*', full_text)
         if hash_tag:
             if isinstance(hash_tag, list):
@@ -243,133 +304,89 @@ def listen(status):
             else:
                 hash_tags = [hash_tag]
             return hash_tags
+        return []
     except Exception as e:
         print(e)
-        logging.error(f'Error on Listen: {e}\nFailed tweet: {status._json}')
+        logging.error(f'Error on Listen: {e}\nFailed tweet: {status}')
 
 
-class TwitterStreamListener(tweepy.StreamListener):
-    """ A listener handles tweets are the received from the stream.
-        This is a basic listener that just prints received tweets to stdout.
-    """
-    # cnt = 0
-
-    def on_status(self, status):
-        from datetime import datetime
-        rn = datetime.now()
-        with jsonlines.open('Data/Primary/Tweets-%s-%s-%s-%s.jsonl' %
-                            (rn.month, rn.day, rn.hour, "{:02d}".format(floor(rn.minute/10)*10)), mode='a') as writer:
-            writer.write(status_to_dict(status))
-        # tags = listen(status)
-
-        # self.body['track'] += u','+u','.join(tags).encode('utf8')
-        # self.cnt = 0
-
-    def on_error(self, status_code):
-        # self.cnt += 1
-        print(f'Error being processed. Code: {status_code}') #, Cnt: {self.cnt}')
-        if status_code == 420:
-            print("The request is understood, but it has been refused or access is not allowed. Limit is maybe reached.")
-        #    time.sleep(self.cnt << 1)
-            return True
-        else:
-            logging.error(f'Status code: {status_code} in StreamListener')
-            return False
-
-
-def status_to_dict(tweet):
-    try:
-        tweet_ = dict()
-        tweet_['timestamp'] = tweet.created_at.timestamp()
-        if 'extended_text' in tweet._json.keys():
-            tweet_['text'] = tweet.extended_text.full_text
-            if 'extended_entities' in tweet.extended_text._json.keys():
-                tweet_['entities'] = tweet.extended_text.entities
-            else:
-                tweet_['entities'] = tweet.extended_text.entities
-        else:
-            tweet_['text'] = tweet.text
-            tweet_['entities'] = tweet.entities
-        if tweet.lang:
-            tweet_['lang'] = tweet.lang
-        if 'retweeted_status' in tweet._json.keys():
-            tweet_['retweeted_status'] = status_to_dict(tweet.retweeted_status)
-        if 'quoted_status' in tweet._json.keys():
-            tweet_['quoted_status'] = status_to_dict(tweet.quoted_status)
-        if tweet.in_reply_to_status_id:
-            tweet_['in_reply_to_status_id'] = tweet.in_reply_to_status_id
-        if tweet.in_reply_to_user_id:
-            tweet_['in_reply_to_user_id'] = tweet.in_reply_to_user_id
-        if tweet.retweet_count:
-            tweet_['retweet_count'] = tweet.retweet_count
-        else:
-            tweet_['retweet_count'] = 0
-        if tweet.favorite_count:
-            tweet_['favorite_count'] = tweet.favorite_count
-        else:
-            tweet_['favorite_count'] = 0
-        tweet_['user_id'] = tweet.user.id
-        tweet_['coordinates'] = tweet.coordinates
-        tweet_['id'] = int(tweet.id)
-    except Exception as e:
-        print(e)
-        logging.error(f'Error on status_to_dict[Tweet]: {e}\nFailed tweet: {tweet._json}\n')
-
-    try:
-        user = dict()
-        user['screen_name'] = tweet.user.screen_name
-        user['followers_count'] = tweet.user.followers_count
-        user['verified'] = tweet.user.verified
-        user['created_at'] = tweet.user.created_at.timestamp()
-        user['id'] = tweet.user.id
-        if tweet.user.lang:
-            user['lang'] = tweet.user.lang
-        tweet_['user'] = user
-    except Exception as e:
-        print(e)
-        logging.error(f'Error on status_to_dict[User]: {e}\nFailed tweet: {tweet._json}\n')
-    return tweet_
+# def status_to_dict(tweet):
+#     try:
+#         tweet_ = dict()
+#         tweet_['created_at'] = tweet.created_at
+#         tweet_['text'] = tweet.full_text
+#         if tweet.lang:
+#             tweet_['lang'] = tweet.lang
+#         if 'retweeted_status' in tweet._json.keys():
+#             tweet_['retweeted_status'] = status_to_dict(tweet.retweeted_status)
+#         if 'quoted_status' in tweet._json.keys():
+#             tweet_['quoted_status'] = status_to_dict(tweet.quoted_status)
+#         if tweet.in_reply_to_status_id:
+#             tweet_['in_reply_to_status_id'] = tweet.in_reply_to_status_id
+#         if tweet.in_reply_to_user_id:
+#             tweet_['in_reply_to_user_id'] = tweet.in_reply_to_user_id
+#         if tweet.retweet_count:
+#             tweet_['retweet_count'] = tweet.retweet_count
+#         else:
+#             tweet_['retweet_count'] = 0
+#         if tweet.favorite_count:
+#             tweet_['favorite_count'] = tweet.favorite_count
+#         else:
+#             tweet_['favorite_count'] = 0
+#         tweet_['entities'] = tweet.entities
+#         tweet_['user_id'] = tweet.user.id
+#         tweet_['coordinates'] = tweet.coordinates
+#         # hash_tag = re.search(r'\#\w*', tweet.full_text)
+#         # if hash_tag:
+#         #     if isinstance(hash_tag, list):
+#         #         # for tag in hash_tag: hash_tags.add(tag)
+#         #         tweet_['hashtags'] = hash_tag
+#         #     else:
+#         #         # hash_tags.add(hash_tag)
+#         #         tweet_['hashtags'] = [hash_tag]
+#         tweet_['id'] = int(tweet.id)
+#     except Exception as e:
+#         print(e)
+#         print(tweet)
+#         logging.error(f'Error: {e}\nFailed tweet: {tweet}\n')
+#
+#     try:
+#         user = dict()
+#         user['screen_name'] = tweet.user.screen_name
+#         user['followers_count'] = tweet.user.followers_count
+#         user['verified'] = tweet.user.verified
+#         user['created_at'] = tweet.user.created_at
+#         user['id'] = tweet.user.id
+#         if tweet.user.lang:
+#             user['lang'] = tweet.user.lang
+#         tweet_['user'] = user
+#     except Exception as e:
+#         print(e)
+#         print(tweet)
+#         logging.error(f'Error: {e}\nFailed tweet: {tweet}\n')
+#     return tweet_
 
 
 if __name__ == "__main__":
-    #Construct watch list from names, usernames and seen hashtags
-    name_list = ['Joe Biden', 'Bernie Sanders', 'Elizabeth Warren', 'Amy Klobuchar', 'Michael Bloomberg',
-                'Andrew Yang', 'Tulsi Gabbard', 'Pete Buttigieg']
-    name_list += [name.split()[1] for name in name_list]
-    name_list += ['Bernie']
-    user_list = ['JoeBiden', 'BernieSanders', 'ewarren', 'amyklobuchar', 'MikeBloomberg', 'AndrewYang',
-                 'TulsiGabbard', 'PeteButtigieg']
-    name_list += ["@" + name for name in user_list]
-    user_ids = ['939091', '216776631', '357606935', '33537967', '16581604', '2228878592', '26637348', '226222147']
-    tag_list = set(result['text'] for result in graph.run("""MATCH (n:Hashtag) RETURN n.text as text"""))
-    watch_list = set(name_list+user_list).union(tag_list)
+    rn = datetime.now()
+    RunTime = (datetime.now().minute/10-1)*10
+    path = 'Data/Primary/'
+    tags = []
+    for filename in os.listdir('Data/Primary/'):
 
-    #Set up Tweepy Stream
-    auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
-    auth.set_access_token(config.access_token, config.access_token_secret)
-    api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, retry_count=10, retry_delay=5,
-                     retry_errors=5)
-    myStreamListener = TwitterStreamListener()
-    myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
+        if filename != 'Tweets-%s-%s-%s-%s.jsonl'.format(
+                rn.month, rn.day, rn.hour, "{:02d}".format(floor(rn.minute / 10) * 10)):
+            with jsonlines.open(path+filename, mode='r') as reader:
+                for line in reader:
+                    try:
+                        tags += listen(line)
+                    except Exception as e:
+                        logging.error(f'Error on Read: {e}\nFailed tweet: {line}')
+                        break
+                print(f'{filename} processed in {datetime.now()-rn} seconds.')
+            # Move a file from the directory d1 to d2
+            shutil.move(path+filename, 'Data/Primary_Processed/'+filename)
 
-    #Start your engines
-    dt = datetime.now()
-    RunTime = datetime.now().minute/10*10
-
-
-    async def cluster_flocks(start, matrix):
-        while datetime.now().minute/10*10 == start:
-            await time.sleep(1)
-        matrix.close()
-        sys.stdout.flush()
-        os.execl('graphstream.py')
-
-    # breakpoint()
-    loop = asyncio.get_event_loop()
-    tasks = [loop.create_task(cluster_flocks(RunTime, loop)),
-             loop.create_task(myStream.filter(track=watch_list, is_async=False))]
-    loop.run_until_complete(asyncio.wait(tasks))
-    loop.close()
-    sys.stdout.flush()
-    os.execl('graphstream.py')
-
+    logging.debug(f'~~~~{datetime.now*()}~~~~')
+    logging.debug(f"Tags from listening: {tags}\n")
+    logging.debug(f'Tags from querying: {[print(tag) for tag in graph.execute("""MATCH (n:Hashtag) RETURN n.text""")]}\n\n')
