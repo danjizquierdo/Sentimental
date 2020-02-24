@@ -250,20 +250,24 @@ def listen(status):
 
 class TwitterStreamListener(tweepy.StreamListener):
     """ A listener handles tweets are the received from the stream.
-        This is a basic listener that just prints received tweets to stdout.
+        Prints tweets received to terminal and to a new jsonl file every 10 minutes.
     """
-    # cnt = 0
 
     def on_status(self, status):
         from datetime import datetime
         rn = datetime.now()
+        try:
+            if 'extended_text' in status._json.keys():
+                text = status.extended_text.full_text
+            else:
+                text = status.text
+            print(f' ~~~ TweetTweetTweet from {status.user.screen_name}~~~ ')
+            print(text+'\n\n')
+        except:
+            print('\n\nSIREN !?!?! Failure on TVStream !?!?! SIREN\n\n')
         with jsonlines.open('Data/Primary/Tweets-%s-%s-%s-%s.jsonl' %
                             (rn.month, rn.day, rn.hour, "{:02d}".format(floor(rn.minute/10)*10)), mode='a') as writer:
             writer.write(status_to_dict(status))
-        # tags = listen(status)
-
-        # self.body['track'] += u','+u','.join(tags).encode('utf8')
-        # self.cnt = 0
 
     def on_error(self, status_code):
         # self.cnt += 1
