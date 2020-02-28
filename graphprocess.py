@@ -17,7 +17,6 @@ from collections import Counter
 import glob
 
 logging.basicConfig(filename='neo4j_errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
-logging.basicConfig(filename='neo4j_errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
 
 
 def strip_tweets(tweet):
@@ -36,52 +35,45 @@ def strip_tweets(tweet):
     tweet = re.sub(hashtag, '', tweet)
     return tweet
 
+# Functions to set up and encode sentiment
 
-nltk.download('vader_lexicon')
+# nltk.download('vader_lexicon')
+#
+# sentiment_analyzer = SentimentIntensityAnalyzer()
 
-sentiment_analyzer = SentimentIntensityAnalyzer()
-
-
-def polarity_scores(doc):
-    """Returns polarity score set earlier to Vader's analyzer"""
-    return sentiment_analyzer.polarity_scores(doc.text)
-
-
-def graph_sentiment(text):
-    tweet = nlp(strip_tweets(text))
-    return tweet._.polarity_scores['compound'], tweet.vector
-
-
-def encode_sentiment(tweet):
-    sentiment, embedding = graph_sentiment(tweet['text'])
-    sentiment = float(sentiment)
-    t_id = tweet['id_str']
-    if not isinstance(tweet['retweeted_status'], dict):
-        query = '''MERGE (t:Tweet {id_str: $id})
-        ON CREATE SET t.stranded = 1 
-        ON MATCH SET t.sentiment = $sentiment,
-            t.embedding = $embedding
-        '''
-        graph.run(query, id=t_id, sentiment=sentiment, embedding=list(embedding))
-        print('Sentimental')
+#
+# def polarity_scores(doc):
+#     """Returns polarity score set earlier to Vader's analyzer"""
+#     return sentiment_analyzer.polarity_scores(doc.text)
+#
+#
+# def graph_sentiment(text):
+#     tweet = nlp(strip_tweets(text))
+#     return tweet._.polarity_scores['compound'], tweet.vector
 
 
-Doc.set_extension('polarity_scores', getter=polarity_scores)
+# def encode_sentiment(tweet):
+#     sentiment, embedding = graph_sentiment(tweet['text'])
+#     sentiment = float(sentiment)
+#     t_id = tweet['id_str']
+#     if not isinstance(tweet['retweeted_status'], dict):
+#         query = '''MERGE (t:Tweet {id_str: $id})
+#         ON CREATE SET t.stranded = 1
+#         ON MATCH SET t.sentiment = $sentiment,
+#             t.embedding = $embedding
+#         '''
+#         graph.run(query, id=t_id, sentiment=sentiment, embedding=list(embedding))
+#         print('Sentimental')
 
+
+# Doc.set_extension('polarity_scores', getter=polarity_scores)
+
+# Connect to local Neo4J DB
 graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
 
 
-# def get_timestamp(dt_ish):
-#     """Returns DateTime value"""
-#     if isinstance(dt_ish, str):
-#         return pd.to_datetime(dt_ish).timestamp()
-#     else:
-#         return dt_ish.timestamp()
-
-
 def dict_to_node(datadict, *labels, primarykey=None, primarylabel=None, ):
-    # if 'created_at' in datadict.keys():
-    #     datadict['timestamp'] = get_timestamp(datadict['created_at'])
+    """Take in a dictionary and return an instance of the Node class with associated properties"""
     cleandict = {}
     for key, value in datadict.items():
         if isinstance(datadict[key], np.int64):
@@ -127,7 +119,7 @@ def urls_to_nodes(ents):
 
 
 def ent_parser(ents):
-    """Returns dictionary of Hashtag, Mention and Url nodes"""
+    """Returns dictionary of Hashtag, Mention and Url nodes for entity relationships"""
     output = {}
     dents = defaultdict(int)
     dents.update(ents)
@@ -138,12 +130,12 @@ def ent_parser(ents):
 
 
 def user_dtn(datadict):
-    # if datadict['id'] in user_ids:
-    #     return dict_to_node(datadict,'Target',primarykey='id',primarylabel='User',)
+    """Return single User node"""
     return dict_to_node(datadict, 'User', primarykey='id', primarylabel='User')
 
 
 def separate_children(tweet):
+    """Take tweet dict and separate into separate Tweet, User and entity dictionaries contained in output dict"""
     try:
         retweeted = tweet.pop('retweeted_status')
     except KeyError:
@@ -164,6 +156,7 @@ def separate_children(tweet):
     output['tweet'] = dict(tweet)
 
     if isinstance(retweeted, dict) and isinstance(quoted, dict):
+        # Case where tweet both retweeted and quoted
         retweeted.pop('quoted_status')
         output['qtuser'] = quoted.pop('user')
         output['qents'] = quoted.pop('entities')
@@ -175,11 +168,13 @@ def separate_children(tweet):
         output['quoted'] = quoted
 
     elif isinstance(quoted, dict):
+        # Case where tweet was quote
         output['qtuser'] = quoted.pop('user')
         output['qents'] = quoted.pop('entities')
         output['quoted'] = quoted
 
     elif isinstance(retweeted, dict):
+        # Case where tweet was retweet
         output['rtuser'] = retweeted.pop('user')
         output['rents'] = retweeted.pop('entities')
         output['retweeted'] = retweeted
@@ -188,11 +183,14 @@ def separate_children(tweet):
 
 
 def push_tweet(tweetdict):
+    """Take tweet dict and create Nodes and Relationships to be pushed into network DB"""
     try:
+        # Separate into various dictionaries
         dicts = separate_children(tweetdict)
+        # Start transaction
         tx = graph.begin()
-        # cypher = graph.cypher
 
+        # Handles case where tweet was deleted (may be deprecated)
         if isinstance(dicts['user'], dict):
             user = user_dtn(dicts['user'])
         else:
@@ -205,8 +203,10 @@ def push_tweet(tweetdict):
             tx.commit()
             return True
 
+        # Create tweet Node
         tweet = dict_to_node(dicts['tweet'], 'Tweet')
 
+        # Handle retweet relationships
         if 'retweeted' in dicts.keys():
             rtuser = user_dtn(dicts['rtuser'])
             retweet = dict_to_node(dicts['retweeted'], 'Tweet')
@@ -232,7 +232,6 @@ def push_tweet(tweetdict):
                         # RETURN r")
 
             # Need to update table database with new stats from the time of the retweet
-
 
             for label, entities in ent_parser(dicts['rents']).items():
                 # Goes through each entity and creates a relationship from the original tweet that contained it
@@ -263,6 +262,7 @@ def push_tweet(tweetdict):
                         # tx.merge(u_retweet)
             tx.commit()
 
+        # Handle quoted relationships
         elif 'quoted' in dicts.keys():
             tweet.add_label('Qtweet')
             qtuser = user_dtn(dicts['qtuser'])
@@ -306,6 +306,7 @@ def push_tweet(tweetdict):
                         tx.merge(contains)
             tx.commit()
 
+        # Handle normal tweet relationship
         else:
             tweeted = Relationship(user, 'TWEETS', tweet, timestamp=tweet['timestamp'],
                                    created_at=tweet['created_at'], usrStatusCount=user['statuses_count'],
@@ -327,6 +328,7 @@ def push_tweet(tweetdict):
 
 
 def listen(status):
+    """"""
     try:
         full_text = push_tweet(status)
         hash_tag = re.search(r'\#\w*', full_text)
