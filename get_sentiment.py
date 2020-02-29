@@ -3,6 +3,7 @@ import json
 import config
 import datetime
 import re
+from py2neo import Graph
 import logging
 from sys import argv
 import re
@@ -23,6 +24,7 @@ from random import randint
 
 
 logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
+graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
 
 auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
 auth.set_access_token(config.access_token, config.access_token_secret)
@@ -43,7 +45,7 @@ lemmatizer = WordNetLemmatizer()
 
 
 def process_tweet(tweet):
-    """ Takes in a string, returns a list words in the string that aren't stopwords
+    """ Takes in a string, returns a list of words in the string that aren't stopwords
     Parameters:
         tweet (string):  string of text to be tokenized
     Returns:
@@ -97,9 +99,8 @@ def create_wordcloud(series, tag, top=200, mask=[mask1, mask2]):
         None: The output is a visualization of the strings in series in terms of the
             frequency of their occurrence.
     """
-
     vocab = tokenized(series)
-    cloud = WordCloud(background_color='whitesmoke', max_words=top, mask=mask[randint(0, 1)], width=400, height=300,
+    cloud = WordCloud(background_color='whitesmoke', max_words=top, mask=mask[randint(0, len(mask))], width=400, height=300,
                       contour_width=3, contour_color='crimson').generate(' '.join([word for word in vocab]))
     plt.figure(figsize=(24, 12))
     plt.imshow(cloud, interpolation='bilinear')
@@ -107,6 +108,7 @@ def create_wordcloud(series, tag, top=200, mask=[mask1, mask2]):
     plt.axis('off')
     # plt.tight_layout(pad=0)
     plt.show();
+
 
 def strip_tweets(tweet):
     '''Process tweet text to remove retweets, mentions,links and hashtags.'''
@@ -125,14 +127,29 @@ def strip_tweets(tweet):
     tweet = re.sub(hashtag, '', tweet)
     return tweet, hashtags
 
+
+
+
+def primary_species(labels, prop, weight=False):
+    """Takes in a Label and returns the subgraph for that Label and a list of processed tweet text and property"""
+    weight_clause = f", r.{weight} as {weight}"
+    query = f""" MATCH (u:{labels[0]})-[r]-(t:{labels[1]}) {' WHERE EXISTS (r.'+f'{weight}) ' if weight else ''}
+                 RETURN t.{prop} as {prop}{weight_clause if weight else ''}
+            """
+    return graph.run(query)
+
+
 def cluster_flocks(dicts):
-    hashtags = Counter()
+    #Australia project
+    """Takes in a dictionary of dictionaries and returns a processed text value and hashtag count"""
+    # hashtags = Counter()
     tweets = []
     for dic in dicts.values():
         text, tag = strip_tweets(dic['text'])
         hashtags.update(tag)
         tweets.append([text, tag])
     return tweets, hashtags
+
 
 def myconverter(o):
     if isinstance(o, datetime.datetime):
