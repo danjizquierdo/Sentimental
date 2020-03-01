@@ -6,6 +6,7 @@ import re
 from py2neo import Graph
 import logging
 from sys import argv
+import pandas as pd
 import re
 import nltk
 from nltk import word_tokenize, FreqDist
@@ -128,15 +129,52 @@ def strip_tweets(tweet):
     return tweet, hashtags
 
 
+def read_cypher(cypher, index_col=None):
+    '''
+    Run a Cypher query against the graph, put the results into a df
+
+    Parameters
+    ----------
+    cypher : cypher query to be executed, may or may not have parameters to insert
+    index_col : which column to use as the index, otherwise none used
+
+    Returns
+    -------
+    df : a DataFrame
+    '''
+    results = graph.run(cypher)
+    resrows = [{'name': i[0], 'followers': i[1], 'text': i[2], 'timestamp': i[3]} for i in results]
+    df = pd.DataFrame(resrows)
+    if index_col != None:
+        if index_col =='timestamp':
+            df.set_index(pd.to_datetime(df.timestamp)).drop(['timestamp'],axis=1)
+        else:
+            df.set_index(index_col).drop([index_col], axis=1)
+
+
+    #     if parse_dates != None:
+    #         if isinstance(parse_dates, basestring):
+    #             df[parse_dates] = to_datetime(df[parse_dates], unit = 's')
+    #         elif type(parse_dates) is list:
+    #             for col in parse_dates:
+    #                 df[col] = to_datetime(df[col], unit = 's')
+    return df
 
 
 def primary_species(labels, prop, weight=False):
     """Takes in a Label and returns the subgraph for that Label and a list of processed tweet text and property"""
     weight_clause = f", r.{weight} as {weight}"
     query = f""" MATCH (u:{labels[0]})-[r]-(t:{labels[1]}) {' WHERE EXISTS (r.'+f'{weight}) ' if weight else ''}
-                 RETURN t.{prop} as {prop}{weight_clause if weight else ''}
+                 RETURN u.screen_name as name, u.followers_count as followers, t.{prop} as {prop}{weight_clause if weight else ''}
             """
-    return graph.run(query)
+    return query
+
+
+def attend_rallies(df):
+    #Australia project
+    """Takes in a dataframe and returns the same dataframe with a cleaned text and hashtag column per tweet"""
+    df[['clean_text', 'hashtag']] = df.text.apply(strip_tweets)
+    return df
 
 
 def cluster_flocks(dicts):
