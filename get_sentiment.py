@@ -37,11 +37,12 @@ nltk.download('wordnet')
 tweets = {}
 users = {}
 
-mask1 = np.array(Image.open(requests.get(
-    'https://i.etsystatic.com/7434544/r/il/103fb1/1665355209/il_1588xN.1665355209_2eui.jpg', stream=True).raw))
-mask2 = np.array(Image.open(requests.get(
-    'https://www.vectorportal.com/img_novi/kangaroo-silhouette.jpg',
+mask = np.array(Image.open(requests.get(
+    'https://www.nicepng.com/png/full/73-737405_us-political-map-grayscale-united-states-map-gray.png',
     stream=True).raw))
+# mask2 = np.array(Image.open(requests.get(
+#     'https://www.vectorportal.com/img_novi/kangaroo-silhouette.jpg',
+#     stream=True).raw))
 lemmatizer = WordNetLemmatizer()
 
 
@@ -92,7 +93,7 @@ def wordfrequency(series, top):
     return frequencies.most_common(top)
 
 
-def create_wordcloud(series, tag, top=200, mask=[mask1, mask2]):
+def create_wordcloud(series, tag=False, top=200):
     """ Take in a list of lists and create a WordCloud visualization for those terms.
     Parameters:
             series (iterable): A list of lists containing strings.
@@ -101,11 +102,14 @@ def create_wordcloud(series, tag, top=200, mask=[mask1, mask2]):
             frequency of their occurrence.
     """
     vocab = tokenized(series)
-    cloud = WordCloud(background_color='whitesmoke', max_words=top, mask=mask[randint(0, len(mask))], width=400, height=300,
+    cloud = WordCloud(background_color='whitesmoke', max_words=top, mask=mask, width=400, height=300,
                       contour_width=3, contour_color='crimson').generate(' '.join([word for word in vocab]))
     plt.figure(figsize=(24, 12))
     plt.imshow(cloud, interpolation='bilinear')
-    plt.title(f'Most Common words for {tag}')
+    if tag:
+        plt.title(f'Most Common words for {tag}')
+    else:
+        plt.title(f'Most Common Words')
     plt.axis('off')
     # plt.tight_layout(pad=0)
     plt.show();
