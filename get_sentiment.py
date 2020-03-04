@@ -174,6 +174,15 @@ def primary_species(labels, prop, weight=False):
     return query
 
 
+def candid_community(labels, prop, weight=False):
+    """Takes in a Label and returns the subgraph for that Label and a list of processed tweet text and property"""
+    weight_clause = f", r.{weight} as {weight}"
+    query = f""" MATCH (u:{labels[0]})-[r]-(t:{labels[1]}) {' WHERE EXISTS (r.'+f'{weight}) ' if weight else ''}
+                 RETURN u.screen_name as name, u.followers_count as followers, t.{prop} as {prop}{weight_clause if weight else ''}
+            """
+    return query
+
+
 def attend_rallies(df):
     #Australia project
     """Takes in a dataframe and returns the same dataframe with a cleaned text and hashtag column per tweet"""
