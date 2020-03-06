@@ -1,8 +1,5 @@
 import tweepy
-import json
 import config
-import datetime
-import re
 from py2neo import Graph
 import logging
 import pandas as pd
@@ -14,13 +11,7 @@ from nltk.stem import WordNetLemmatizer
 from nltk.collocations import BigramCollocationFinder as big_find
 import string
 from wordcloud import WordCloud
-from PIL import Image
 import matplotlib.pyplot as plt
-from collections import Counter
-import numpy as np
-import urllib
-import requests
-from random import randint
 
 # Set up logging, database connection, twitter streamer and NLTK
 logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
