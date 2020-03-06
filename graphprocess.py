@@ -1,18 +1,11 @@
-import pandas as pd
 import numpy as np
 from collections import defaultdict
 from py2neo import Graph, Node, Relationship
 import jsonlines
-import spacy
-from spacy.tokens import Doc
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
-import nltk
 import re
 import logging
 from datetime import datetime
 import os
-from math import floor
-import shutil
 from collections import Counter
 import glob
 
@@ -227,10 +220,6 @@ def push_tweet(tweetdict):
                             ON CREATE SET r.count = 1 \
                             ON MATCH SET r.count = r.count+1")
 
-                        # WITH r \
-                        # CALL apoc.atomic.add(r, 'count', 1) YIELD newValue \
-                        # RETURN r")
-
             # Need to update table database with new stats from the time of the retweet
 
             for label, entities in ent_parser(dicts['rents']).items():
@@ -241,7 +230,6 @@ def push_tweet(tweetdict):
                         contains = Relationship(retweet, 'CONTAINS', entity)
                         tx.merge(entity, str(label), primary_key=entity.__primarykey__)
                         tx.merge(contains)
-                        # u_retweet = Relationship(rtuser, 'BROADCASTS', entity)
                         if label == 'User':
                             query = "MATCH (a:User {id: " + str(rtuser['id']) + "}) " + \
                                     "WITH a " + \
@@ -258,8 +246,6 @@ def push_tweet(tweetdict):
                                         ON CREATE SET r.count = 1 \
                                         ON MATCH SET r.count = r.count+1"
                             graph.evaluate(query)
-
-                        # tx.merge(u_retweet)
             tx.commit()
 
         # Handle quoted relationships
@@ -349,6 +335,7 @@ if __name__ == "__main__":
     RunTime = (datetime.now().minute/10-1)*10
     path = 'Data/Primary/'
     tags = Counter()
+    # Loop through jsonl files in the above path
     list_of_files = glob.glob(os.path.join(path, '*.jsonl'))
     latest_file = max(list_of_files, key=os.path.getctime)
     for filename in list_of_files:
