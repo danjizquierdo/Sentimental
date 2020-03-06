@@ -83,14 +83,14 @@ def create_wordcloud(series, tag=False, top=200):
             frequency of their occurrence.
     """
     vocab = tokenized(series)
-    cloud = WordCloud(background_color='whitesmoke', max_words=top, mask=mask, width=400, height=300,
-                      contour_width=3, contour_color='crimson').generate(' '.join([word for word in vocab]))
+    cloud = WordCloud(background_color='coral', max_words=top,  colormap='Blues')\
+        .generate(' '.join([word for word in vocab]))
     plt.figure(figsize=(24, 12))
     plt.imshow(cloud, interpolation='bilinear')
     if tag:
         plt.title(f'Most Common words for {tag}')
     else:
-        plt.title(f'Most Common Words')
+        plt.title(f'Most Common Words', size='40', pad=20)
     plt.axis('off')
     plt.show();
 
