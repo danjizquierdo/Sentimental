@@ -3,27 +3,23 @@ import jsonlines
 import tweepy
 import logging
 import config
-import sys
-from datetime import datetime
-import time
 from math import floor
-import asyncio
-import os
-import glob
-import urllib3
+# import glob
 
+# Set up logging
 logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
 graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
 
 
 class TwitterStreamListener(tweepy.StreamListener):
     """ A listener handles tweets as they are received from the stream.
-        Prints tweets received to terminal and to a new jsonl file every 10 minutes.
+        Prints tweets received to terminal and to a jsonl file, new jsonl file created every 10 minutes.
     """
 
     def on_status(self, status):
         from datetime import datetime
         rn = datetime.now()
+        # Checks if tweet has been truncated and tries to print out the text to terminal every 5 seconds
         if rn.second % 5 == 0:
             try:
                 if 'extended_tweet' in status._json.keys():
@@ -34,6 +30,7 @@ class TwitterStreamListener(tweepy.StreamListener):
                 print(text+'\n\n')
             except:
                 print('\n\nSIREN !?!?! Failure on TVStream !?!?! SIREN\n\n')
+        # Converts status to dictionary and appends to a json
         with jsonlines.open('Data/Primary/Tweets-%s-%s-%s-%s.jsonl' %
                             (rn.month, rn.day, rn.hour, "{:02d}".format(floor(rn.minute/10)*10)), mode='a') as writer:
             tweet = status_to_dict(status)
@@ -41,10 +38,12 @@ class TwitterStreamListener(tweepy.StreamListener):
                 writer.write(tweet)
 
     def on_error(self, status_code):
+        # Logs errors and prints out error message
         from datetime import datetime
         print(f'Error being processed. Code: {status_code}')
         if status_code == 420:
-            logging.error(f"{datetime.now()}: The request is understood, but it has been refused or access is not allowed. Limit is maybe reached.\n")
+            logging.error(f"{datetime.now()}: The request is understood, but it has been \
+            refused or access is not allowed. Limit is maybe reached.\n")
             return True
         else:
             logging.error(f'{datetime.now()} Status code: {status_code} in StreamListener.\n')
@@ -52,6 +51,7 @@ class TwitterStreamListener(tweepy.StreamListener):
 
 
 def status_to_dict(tweet):
+    """Takes Tweepy status and grabs relevant key/value pairs for Tweets and Users."""
     try:
         if tweet.lang == 'in':
             return None
@@ -109,7 +109,7 @@ def status_to_dict(tweet):
 
 
 if __name__ == "__main__":
-    #Construct watch list from names, usernames and seen hashtags
+    # Construct watch list from names and usernames
     name_list = ['Joe Biden', 'Bernie Sanders', 'Elizabeth Warren', 'Amy Klobuchar', 'Michael Bloomberg',
                 'Andrew Yang', 'Tulsi Gabbard', 'Pete Buttigieg']
     name_list += [name.split()[1] for name in name_list]
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     # tag_list = set(result['text'] for result in graph.run("""MATCH (n:Hashtag) RETURN n.text as text"""))
     # watch_list = set(name_list+user_list)#.union(tag_list)
 
-    #Set up Tweepy Stream
+    # Set up Tweepy Stream
     auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
     auth.set_access_token(config.access_token, config.access_token_secret)
     api = tweepy.API(auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True, retry_count=10, retry_delay=5,
@@ -137,30 +137,6 @@ if __name__ == "__main__":
     myStreamListener = TwitterStreamListener()
     myStream = tweepy.Stream(auth=api.auth, listener=myStreamListener)
 
-    #Start your engines
-    dt = datetime.now()
-    RunTime = datetime.now().minute/10*10
-
-
-    async def cluster_flocks(start, matrix):
-        while datetime.now().minute/10*10 == start:
-            await time.sleep(1)
-        print('\\m/ Flocks clustered. Time to jack out and start again. \\m/\n')
-        matrix.close()
-        sys.stdout.flush()
-        os.execl('graphstream.py')
-
-    # breakpoint()
-    loop = asyncio.get_event_loop()
-    tasks = [loop.create_task(cluster_flocks(RunTime, loop)),
-             loop.create_task(myStream.filter(track=watch_list, languages=['en'], is_async=False))]
-    try:
-        loop.run_until_complete(asyncio.wait(tasks))
-    except urllib3.exceptions.ProtocolError as e:
-        loop.close()
-        logging.error(f'{datetime.now()}: Stream has ended with error "{e}"')
-        print(f'\n\nRestarting stream in 10 seconds.\n\n')
-        time.wait(10)
-        sys.stdout.flush()
-        os.execl('graphstream.py')
+    # Start the stream
+    myStream.filter(track=watch_list, languages=['en'], is_async=False)
 
