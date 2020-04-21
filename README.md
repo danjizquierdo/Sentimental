@@ -1,5 +1,5 @@
 # Sentimental
-Toolset for sentiment and statistical analysis of twitter data
+Sentiment and statistical analysis of twitter data related to Super Tuesday 2020
 
 ## Data Analyzed
 The data used for this analysis was streamed from Twitter starting on February 24th and leading up to March 3rd (Super Tuesday). Tweets were gathered which fulfilled the following requirements:
