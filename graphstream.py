@@ -108,25 +108,10 @@ def status_to_dict(tweet):
 
 
 if __name__ == "__main__":
-    # Construct watch list from names and usernames
+    # Construct watch list of terms
     name_list = ['police', 'protests', 'brutality', 'brutal', 'peaceful', 'pellets', 'tear gas', 'club', 'baton', 'riot',
                 'George Floyd', 'justice for', 'blm', 'black lives', 'blacklivesmatter', 'georgefloyd', 'antifa', 'pigs',
                  'ACAB']
-#     name_list += [name.split()[1] for name in name_list]
-#     user_list = ['JoeBiden', 'BernieSanders', 'ewarren', 'amyklobuchar', 'MikeBloomberg', 'AndrewYang',
-#                  'TulsiGabbard', 'PeteButtigieg']
-#     name_list += ["@" + name for name in user_list]
-#     user_ids = ['939091', '216776631', '357606935', '33537967', '16581604', '2228878592', '26637348', '226222147']
-    watch_list = name_list#+user_list
-
-    # Eventually want to add in dynamic detection of trending hashtags based on last hour's activity
-    # list_of_files = glob.glob('/Data/Tag/*.txt')
-    # if list_of_files:
-    #     latest_file = max(list_of_files, key=os.path.getctime)
-    #     with open(latest_file, 'r') as f:
-    #         watch_list += [tag for tag in f.readlines()]
-    # tag_list = set(result['text'] for result in graph.run("""MATCH (n:Hashtag) RETURN n.text as text"""))
-    # watch_list = set(name_list+user_list)#.union(tag_list)
 
     # Set up Tweepy Stream
     auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
