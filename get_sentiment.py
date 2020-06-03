@@ -1,7 +1,4 @@
-import tweepy
-import config
 from py2neo import Graph
-import logging
 import pandas as pd
 import re
 import nltk
@@ -13,14 +10,7 @@ import string
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
-# Set up logging, database connection, twitter streamer and NLTK
-# logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
 graph = Graph("bolt://localhost:7687", auth=("neo4j", "pa55w0rd"))
-
-# auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
-# auth.set_access_token(config.access_token, config.access_token_secret)
-# api = tweepy.API(auth, wait_on_rate_limit=True)
-
 nltk.download('wordnet')
 lemmatizer = WordNetLemmatizer()
 
