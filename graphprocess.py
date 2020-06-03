@@ -28,39 +28,6 @@ def strip_tweets(tweet):
     tweet = re.sub(hashtag, '', tweet)
     return tweet
 
-# Functions to set up and encode sentiment
-
-# nltk.download('vader_lexicon')
-#
-# sentiment_analyzer = SentimentIntensityAnalyzer()
-
-#
-# def polarity_scores(doc):
-#     """Returns polarity score set earlier to Vader's analyzer"""
-#     return sentiment_analyzer.polarity_scores(doc.text)
-#
-#
-# def graph_sentiment(text):
-#     tweet = nlp(strip_tweets(text))
-#     return tweet._.polarity_scores['compound'], tweet.vector
-
-
-# def encode_sentiment(tweet):
-#     sentiment, embedding = graph_sentiment(tweet['text'])
-#     sentiment = float(sentiment)
-#     t_id = tweet['id_str']
-#     if not isinstance(tweet['retweeted_status'], dict):
-#         query = '''MERGE (t:Tweet {id_str: $id})
-#         ON CREATE SET t.stranded = 1
-#         ON MATCH SET t.sentiment = $sentiment,
-#             t.embedding = $embedding
-#         '''
-#         graph.run(query, id=t_id, sentiment=sentiment, embedding=list(embedding))
-#         print('Sentimental')
-
-
-# Doc.set_extension('polarity_scores', getter=polarity_scores)
-
 # Connect to local Neo4J DB
 graph = Graph("bolt://localhost:7687", auth=("neo4j", "pa55w0rd"))
 
@@ -364,9 +331,3 @@ if __name__ == "__main__":
                     except Exception as e:
                         logging.error(f'Error on Read: {e}\nFailed tweet: {line}')
                 print(f'{filename} processed in {datetime.now()-rn} seconds.')
-            # shutil.move(filename, filename[:12]+'_Processed'+filename[12:])
-#     with open(f'Data/Tags/{rn.month}-{rn.day}-{rn.hour}.txt', 'w') as f:
-#         for tag in tags.most_common(10):
-# #             f.write(tag[0]+'\n')
-#     print(f'~~~~{datetime.now()}~~~~')
-#     print(f"Tags from listening: {tags.most_common(10)}\n")
