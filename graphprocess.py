@@ -62,7 +62,7 @@ def strip_tweets(tweet):
 # Doc.set_extension('polarity_scores', getter=polarity_scores)
 
 # Connect to local Neo4J DB
-graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
+graph = Graph("bolt://localhost:7687", auth=("neo4j", "pa55w0rd"))
 
 
 def dict_to_node(datadict, *labels, primarykey=None, primarylabel=None, ):
@@ -110,15 +110,26 @@ def urls_to_nodes(ents):
             out.append(dict_to_node(each, 'Url', primarykey='expanded_url', primarylabel='Url'))
     return out
 
+def media_to_nodes(ents):
+    """Returns list of Media nodes"""
+    out = []
+    if ents['media']:
+        for each in ents['media']:
+            each.pop('indices')
+            out.append(dict_to_node(each, 'Media', primarykey='expanded_url', primarylabel='Media'))
+    return out
+    
+
 
 def ent_parser(ents):
-    """Returns dictionary of Hashtag, Mention and Url nodes for entity relationships"""
+    """Returns dictionary of Hashtag, Mention, Url and Media nodes for entity relationships"""
     output = {}
     dents = defaultdict(int)
     dents.update(ents)
     output['Hashtag'] = hashtags_to_nodes(dents)
     output['User'] = mentions_to_nodes(dents)
     output['Url'] = urls_to_nodes(dents)
+    output['Media'] = media_to_nodes(dents)
     return {k: v for (k, v) in output.items() if v}
 
 
@@ -333,7 +344,7 @@ def listen(status):
 if __name__ == "__main__":
     rn = datetime.now()
     RunTime = (datetime.now().minute/10-1)*10
-    path = 'Data/Primary/'
+    path = 'Data/BLM/'
     tags = Counter()
     # Loop through jsonl files in the above path
     list_of_files = glob.glob(os.path.join(path, '*.jsonl'))
@@ -344,7 +355,7 @@ if __name__ == "__main__":
             with jsonlines.open(filename, mode='r') as reader:
                 for line in reader:
                     try:
-                        if re.match(rf'Data/Primary/Tweets-{rn.month}-{rn.day}-{rn.hour}.*', filename):
+                        if re.match(rf'Data/BLM/Tweets-{rn.month}-{rn.day}-{rn.hour}.*', filename):
                             recent = listen(line)
                             if recent:
                                 tags.update(recent)
@@ -354,8 +365,8 @@ if __name__ == "__main__":
                         logging.error(f'Error on Read: {e}\nFailed tweet: {line}')
                 print(f'{filename} processed in {datetime.now()-rn} seconds.')
             # shutil.move(filename, filename[:12]+'_Processed'+filename[12:])
-    with open(f'Data/Tags/{rn.month}-{rn.day}-{rn.hour}.txt', 'w') as f:
-        for tag in tags.most_common(10):
-            f.write(tag[0]+'\n')
-    print(f'~~~~{datetime.now()}~~~~')
-    print(f"Tags from listening: {tags.most_common(10)}\n")
+#     with open(f'Data/Tags/{rn.month}-{rn.day}-{rn.hour}.txt', 'w') as f:
+#         for tag in tags.most_common(10):
+# #             f.write(tag[0]+'\n')
+#     print(f'~~~~{datetime.now()}~~~~')
+#     print(f"Tags from listening: {tags.most_common(10)}\n")

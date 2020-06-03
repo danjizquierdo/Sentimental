@@ -14,12 +14,12 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
 # Set up logging, database connection, twitter streamer and NLTK
-logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
-graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
+# logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
+graph = Graph("bolt://localhost:7687", auth=("neo4j", "pa55w0rd"))
 
-auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
-auth.set_access_token(config.access_token, config.access_token_secret)
-api = tweepy.API(auth, wait_on_rate_limit=True)
+# auth = tweepy.OAuthHandler(config.consumer_key, config.consumer_secret)
+# auth.set_access_token(config.access_token, config.access_token_secret)
+# api = tweepy.API(auth, wait_on_rate_limit=True)
 
 nltk.download('wordnet')
 lemmatizer = WordNetLemmatizer()
@@ -145,3 +145,19 @@ def primary_species(labels, prop, weight=False):
                  RETURN u.screen_name as name, u.followers_count as followers, t.{prop} as {prop}{weight_clause if weight else ''}
             """
     return query
+
+def trigger_happy():
+    """Returns urls for Tweets containing Media that are photos or video"""
+    query = f"""MATCH (t:Tweet)-[:CONTAINS]->(m:Media)
+    WHERE m.type IN ['photo', 'video']
+    RETURN m.url as url 
+    """
+    results = graph.run(query)
+    from datetime import datetime
+    from math import floor
+    rn = datetime.now()
+    
+    with open('Data/BLM/Media-%s-%s-%s-%s.txt' %
+                                (rn.month, rn.day, rn.hour, "{:02d}".format(floor(rn.minute/10)*10)), mode='w+') as writer:
+        for result in results:
+            writer.write(result[0]+'\n')

@@ -7,8 +7,8 @@ from math import floor
 # import glob
 
 # Set up logging
-logging.basicConfig(filename='errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
-graph = Graph("bolt://localhost:7687", auth=("neo4j", "password"))
+logging.basicConfig(filename='Data/BLM/errors.log', filemode='a+', format='%(asctime)s: %(message)s', level=logging.ERROR)
+graph = Graph("bolt://localhost:7687", auth=("neo4j", "pa55w0rd"))
 
 
 class TwitterStreamListener(tweepy.StreamListener):
@@ -31,11 +31,11 @@ class TwitterStreamListener(tweepy.StreamListener):
             except:
                 print('\n\nSIREN !?!?! Failure on TVStream !?!?! SIREN\n\n')
         # Converts status to dictionary and appends to a json
-        with jsonlines.open('Data/Primary/Tweets-%s-%s-%s-%s.jsonl' %
-                            (rn.month, rn.day, rn.hour, "{:02d}".format(floor(rn.minute/10)*10)), mode='a') as writer:
-            tweet = status_to_dict(status)
-            if tweet:
-                writer.write(tweet)
+        tweet = status_to_dict(status)
+        if tweet:
+            with jsonlines.open('Data/BLM/Tweets-%s-%s-%s-%s.jsonl' %
+                                (rn.month, rn.day, rn.hour, "{:02d}".format(floor(rn.minute/10)*10)), mode='a') as writer:
+                writer.write(tweet)            
 
     def on_error(self, status_code):
         # Logs errors and prints out error message
@@ -53,10 +53,9 @@ class TwitterStreamListener(tweepy.StreamListener):
 def status_to_dict(tweet):
     """Takes Tweepy status and grabs relevant key/value pairs for Tweets and Users."""
     try:
-        if tweet.lang == 'in':
-            return None
         tweet_ = dict()
         tweet_['timestamp'] = tweet.created_at.timestamp()
+
         if 'extended_text' in tweet._json.keys():
             tweet_['text'] = tweet.extended_text.full_text
             if 'extended_entities' in tweet.extended_text._json.keys():
@@ -110,15 +109,15 @@ def status_to_dict(tweet):
 
 if __name__ == "__main__":
     # Construct watch list from names and usernames
-    name_list = ['Joe Biden', 'Bernie Sanders', 'Elizabeth Warren', 'Amy Klobuchar', 'Michael Bloomberg',
-                'Andrew Yang', 'Tulsi Gabbard', 'Pete Buttigieg']
-    name_list += [name.split()[1] for name in name_list]
-    name_list += ['Bernie']
-    user_list = ['JoeBiden', 'BernieSanders', 'ewarren', 'amyklobuchar', 'MikeBloomberg', 'AndrewYang',
-                 'TulsiGabbard', 'PeteButtigieg']
-    name_list += ["@" + name for name in user_list]
-    user_ids = ['939091', '216776631', '357606935', '33537967', '16581604', '2228878592', '26637348', '226222147']
-    watch_list = name_list+user_list
+    name_list = ['police', 'protests', 'brutality', 'brutal', 'peaceful', 'pellets', 'tear gas', 'club', 'baton', 'riot',
+                'George Floyd', 'justice for', 'blm', 'black lives', 'blacklivesmatter', 'georgefloyd', 'antifa', 'pigs',
+                 'ACAB']
+#     name_list += [name.split()[1] for name in name_list]
+#     user_list = ['JoeBiden', 'BernieSanders', 'ewarren', 'amyklobuchar', 'MikeBloomberg', 'AndrewYang',
+#                  'TulsiGabbard', 'PeteButtigieg']
+#     name_list += ["@" + name for name in user_list]
+#     user_ids = ['939091', '216776631', '357606935', '33537967', '16581604', '2228878592', '26637348', '226222147']
+    watch_list = name_list#+user_list
 
     # Eventually want to add in dynamic detection of trending hashtags based on last hour's activity
     # list_of_files = glob.glob('/Data/Tag/*.txt')
