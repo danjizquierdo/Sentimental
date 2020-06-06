@@ -140,7 +140,7 @@ def trigger_happy():
     """Returns urls for Tweets containing Media that are photos or video"""
     query = f"""MATCH (t:Tweet)-[:CONTAINS]->(m:Media)
     WHERE m.type IN ['photo', 'video']
-    RETURN m.url as url 
+    RETURN m.expanded_url as url 
     """
     results = graph.run(query)
     from datetime import datetime

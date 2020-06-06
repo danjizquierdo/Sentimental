@@ -109,7 +109,7 @@ def status_to_dict(tweet):
 
 if __name__ == "__main__":
     # Construct watch list of terms
-    name_list = ['police', 'protests', 'brutality', 'brutal', 'peaceful', 'pellets', 'tear gas', 'club', 'baton', 'riot',
+    watch_list = ['police', 'protests', 'brutality', 'brutal', 'peaceful', 'pellets', 'tear gas', 'baton', 'riot',
                 'George Floyd', 'justice for', 'blm', 'black lives', 'blacklivesmatter', 'georgefloyd', 'antifa', 'pigs',
                  'ACAB']
 
